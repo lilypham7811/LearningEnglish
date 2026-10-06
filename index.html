@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Shadow English</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="top">
+    <div class="brand">🗣️ <strong>Shadow English</strong></div>
+    <button id="settingsBtn" class="ghost" aria-label="Settings">⚙️ Voices</button>
+  </header>
+
+  <main>
+    <section class="hero">
+      <h1>Type a topic, listen, and shadow.</h1>
+      <form id="topicForm" class="search">
+        <input id="topicInput" type="text" placeholder="e.g. restaurant, job interview, climate change…" autocomplete="off" />
+        <select id="level" title="English level for AI dialogs">
+          <option>Beginner</option>
+          <option selected>Intermediate</option>
+          <option>Advanced</option>
+        </select>
+        <button type="submit" class="primary">Create dialog</button>
+      </form>
+      <p class="ai-note">✨ Any topic works. Common topics open instantly; new topics are written by a free AI that runs inside your browser (no API, no cost). The first time, it downloads once (~900 MB).</p>
+      <label class="ai-toggle">
+        <input type="checkbox" id="aiMode" />
+        <span>Always write a new AI dialog <small>(even for common topics like "restaurant")</small></span>
+      </label>
+      <div id="aiStatus" class="ai-status" hidden></div>
+      <div id="chips" class="chips"></div>
+    </section>
+
+    <section id="savedSection" class="saved" hidden>
+      <div class="saved-head">
+        <h3>⭐ My saved dialogs</h3>
+        <div>
+          <button id="exportBtn" class="ghost" title="Download a backup file">⬇ Export</button>
+          <button id="importBtn" class="ghost" title="Load a backup file">⬆ Import</button>
+          <input id="importFile" type="file" accept=".json,application/json" hidden />
+        </div>
+      </div>
+      <p id="savedEmpty" class="meta">Nothing saved yet. Open a dialog you like and press ☆ Save.</p>
+      <ul id="savedList" class="saved-list"></ul>
+    </section>
+
+    <section id="dialogSection" hidden>
+      <div class="dialog-head">
+        <div>
+          <h2 id="dialogTitle"></h2>
+          <div id="dialogMeta" class="meta"></div>
+        </div>
+        <div class="controls">
+          <button id="playAllBtn" class="primary">▶ Play all</button>
+          <button id="stopBtn" class="ghost">■ Stop</button>
+          <button id="saveBtn" class="save">☆ Save</button>
+          <button id="regenBtn" class="ghost" title="Ask the AI for a different conversation on this topic">🔄 New version</button>
+          <button id="editBtn" class="ghost" title="Fix any sentence by typing">✏️ Edit</button>
+          <label class="rate">Speed <input id="rate" type="range" min="0.5" max="1.3" step="0.05" value="0.9" /> <span id="rateVal">0.9×</span></label>
+          <label class="check"><input type="checkbox" id="hideText" /> Hide text</label>
+        </div>
+      </div>
+      <p class="hint">Click 🔊 to listen to a line. Click the line itself to shadow it.</p>
+      <ol id="dialog" class="dialog"></ol>
+    </section>
+  </main>
+
+  <!-- Shadowing panel -->
+  <aside id="shadow" class="shadow" hidden>
+    <div class="shadow-inner">
+      <div class="shadow-head">
+        <span id="shadowWho" class="who"></span>
+        <span id="shadowPos" class="meta"></span>
+        <button id="closeShadow" class="ghost" aria-label="Close">✕</button>
+      </div>
+      <p id="shadowText" class="shadow-text"></p>
+      <div class="shadow-actions">
+        <button id="prevLine" class="ghost">◀</button>
+        <button id="listenBtn" class="primary">🔊 Listen</button>
+        <button id="slowBtn">🐢 Slow</button>
+        <button id="loopBtn" title="Plays the line, then pauses so you can repeat it, 3 times">🔁 Shadow ×3</button>
+        <button id="recordBtn" class="record">🎙️ Record</button>
+        <button id="nextLine" class="ghost">▶</button>
+      </div>
+      <div id="result" class="result" hidden>
+        <div class="score"><span id="scoreNum">0</span><small>%</small></div>
+        <div>
+          <div class="heard-label">Word match:</div>
+          <p id="diff" class="diff"></p>
+          <div class="heard-label">We heard: <em id="heard"></em></div>
+          <div class="compare">
+            <button id="playMine">▶ My recording</button>
+            <button id="playOrig">▶ Original</button>
+          </div>
+        </div>
+      </div>
+      <p id="shadowNote" class="note"></p>
+    </div>
+  </aside>
+
+  <!-- Voice settings -->
+  <dialog id="settings">
+    <form method="dialog">
+      <h3>Voices</h3>
+      <label>Speaker A <select id="voiceA"></select></label>
+      <label>Speaker B <select id="voiceB"></select></label>
+      <h3>AI quality</h3>
+      <label>AI model
+        <select id="aiModel">
+          <option value="fast">Fast: Llama 3.2 1B (~900 MB download)</option>
+          <option value="better">Better quality: Llama 3.2 3B (~2.3 GB download, slower)</option>
+        </select>
+      </label>
+      <p class="meta">Voices come from your browser and operating system. Edge has very natural "Online (Natural)" voices.</p>
+      <button class="primary">Done</button>
+    </form>
+  </dialog>
+
+  <script src="dialogs.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
