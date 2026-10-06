@@ -1,68 +1,77 @@
 <!doctype html>
-<html lang="en">
+<html lang="vi">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Shadow English</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#4f6cff" />
+  <title>Shadow English – Luyện nói tiếng Anh</title>
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
   <header class="top">
     <div class="brand">🗣️ <strong>Shadow English</strong></div>
-    <button id="settingsBtn" class="ghost" aria-label="Settings">⚙️ Voices</button>
+    <button id="settingsBtn" class="icon ghost" aria-label="Cài đặt">⚙️</button>
   </header>
 
   <main>
     <section class="hero">
-      <h1>Type a topic, listen, and shadow.</h1>
+      <h1>Luyện nói tiếng Anh giao tiếp mỗi ngày</h1>
+      <p class="sub">Chọn chủ đề → nghe hội thoại → nhại theo từng câu → nhập vai nói chuyện.</p>
       <form id="topicForm" class="search">
-        <input id="topicInput" type="text" placeholder="e.g. restaurant, job interview, climate change…" autocomplete="off" />
-        <select id="level" title="English level for AI dialogs">
-          <option>Beginner</option>
-          <option selected>Intermediate</option>
-          <option>Advanced</option>
-        </select>
-        <button type="submit" class="primary">Create dialog</button>
+        <input id="topicInput" type="text" enterkeyhint="go" autocomplete="off"
+               placeholder="Nhập chủ đề: gọi cà phê, hỏi đường, đi siêu thị…" />
+        <div class="search-row">
+          <select id="level" aria-label="Trình độ">
+            <option value="Beginner">Cơ bản</option>
+            <option value="Intermediate" selected>Trung cấp</option>
+            <option value="Advanced">Nâng cao</option>
+          </select>
+          <button type="submit" class="primary">Tạo hội thoại</button>
+        </div>
       </form>
-      <p class="ai-note">✨ Any topic works. Common topics open instantly; new topics are written by a free AI that runs inside your browser (no API, no cost). The first time, it downloads once (~900 MB).</p>
-      <label class="ai-toggle">
-        <input type="checkbox" id="aiMode" />
-        <span>Always write a new AI dialog <small>(even for common topics like "restaurant")</small></span>
-      </label>
+      <p id="aiNote" class="ai-note"></p>
       <div id="aiStatus" class="ai-status" hidden></div>
-      <div id="chips" class="chips"></div>
     </section>
 
-    <section id="savedSection" class="saved" hidden>
-      <div class="saved-head">
-        <h3>⭐ My saved dialogs</h3>
+    <section id="savedSection" class="card" hidden>
+      <div class="card-head">
+        <h3>⭐ Bài đã lưu</h3>
         <div>
-          <button id="exportBtn" class="ghost" title="Download a backup file">⬇ Export</button>
-          <button id="importBtn" class="ghost" title="Load a backup file">⬆ Import</button>
+          <button id="exportBtn" class="ghost small" title="Tải file sao lưu">⬇ Xuất</button>
+          <button id="importBtn" class="ghost small" title="Mở file sao lưu">⬆ Nhập</button>
           <input id="importFile" type="file" accept=".json,application/json" hidden />
         </div>
       </div>
-      <p id="savedEmpty" class="meta">Nothing saved yet. Open a dialog you like and press ☆ Save.</p>
+      <p id="savedEmpty" class="meta">Chưa có bài nào. Mở một bài bạn thích rồi bấm ☆ Lưu.</p>
       <ul id="savedList" class="saved-list"></ul>
+    </section>
+
+    <section class="topics">
+      <h3 class="section-label">Chủ đề có sẵn</h3>
+      <div id="chips" class="chips"></div>
     </section>
 
     <section id="dialogSection" hidden>
       <div class="dialog-head">
-        <div>
-          <h2 id="dialogTitle"></h2>
-          <div id="dialogMeta" class="meta"></div>
-        </div>
-        <div class="controls">
-          <button id="playAllBtn" class="primary">▶ Play all</button>
-          <button id="stopBtn" class="ghost">■ Stop</button>
-          <button id="saveBtn" class="save">☆ Save</button>
-          <button id="regenBtn" class="ghost" title="Ask the AI for a different conversation on this topic">🔄 New version</button>
-          <button id="editBtn" class="ghost" title="Fix any sentence by typing">✏️ Edit</button>
-          <label class="rate">Speed <input id="rate" type="range" min="0.5" max="1.3" step="0.05" value="0.9" /> <span id="rateVal">0.9×</span></label>
-          <label class="check"><input type="checkbox" id="hideText" /> Hide text</label>
-        </div>
+        <h2 id="dialogTitle"></h2>
+        <div id="dialogTitleVi" class="title-vi"></div>
+        <div id="dialogMeta" class="meta"></div>
       </div>
-      <p class="hint">Click 🔊 to listen to a line. Click the line itself to shadow it.</p>
+      <div class="controls main">
+        <button id="playAllBtn" class="primary">▶ Nghe cả bài</button>
+        <button id="roleplayBtn" class="accent">🎭 Nhập vai</button>
+        <button id="stopBtn" class="ghost icon" aria-label="Dừng">■</button>
+      </div>
+      <div class="controls">
+        <button id="saveBtn" class="save small">☆ Lưu</button>
+        <label class="toggle" id="showViWrap"><input type="checkbox" id="showVi" /> 🇻🇳 Nghĩa</label>
+        <a id="translateAll" class="btnlink small" target="_blank" rel="noopener" hidden>🌐 Dịch cả bài</a>
+        <label class="toggle"><input type="checkbox" id="hideText" /> 🙈 Ẩn chữ</label>
+        <label class="rate">Tốc độ <input id="rate" type="range" min="0.5" max="1.3" step="0.05" value="0.9" /> <span id="rateVal">0.9×</span></label>
+        <button id="regenBtn" class="ghost small" title="Nhờ AI viết bài khác cùng chủ đề">🔄 Bài khác</button>
+        <button id="editBtn" class="ghost small" title="Sửa câu bằng tay">✏️ Sửa</button>
+      </div>
+      <p class="hint">Bấm 🔊 để nghe một câu. Bấm vào câu để luyện nhại (shadowing).</p>
       <ol id="dialog" class="dialog"></ol>
     </section>
   </main>
@@ -73,26 +82,31 @@
       <div class="shadow-head">
         <span id="shadowWho" class="who"></span>
         <span id="shadowPos" class="meta"></span>
-        <button id="closeShadow" class="ghost" aria-label="Close">✕</button>
+        <span class="spacer"></span>
+        <button id="prevLine" class="icon ghost" aria-label="Câu trước">◀</button>
+        <button id="nextLine" class="icon ghost" aria-label="Câu sau">▶</button>
+        <button id="closeShadow" class="icon ghost" aria-label="Đóng">✕</button>
       </div>
       <p id="shadowText" class="shadow-text"></p>
+      <p id="shadowVi" class="shadow-vi"></p>
       <div class="shadow-actions">
-        <button id="prevLine" class="ghost">◀</button>
-        <button id="listenBtn" class="primary">🔊 Listen</button>
-        <button id="slowBtn">🐢 Slow</button>
-        <button id="loopBtn" title="Plays the line, then pauses so you can repeat it, 3 times">🔁 Shadow ×3</button>
-        <button id="recordBtn" class="record">🎙️ Record</button>
-        <button id="nextLine" class="ghost">▶</button>
+        <button id="listenBtn" class="primary">🔊 Nghe</button>
+        <button id="slowBtn">🐢 Chậm</button>
+        <button id="chunkBtn" title="Luyện từng cụm từ, ghép dần thành cả câu">🧩 Từng cụm</button>
+        <button id="loopBtn" title="Nghe rồi nói theo, 3 lần">🔁 Nhại ×3</button>
       </div>
+      <button id="recordBtn" class="record wide">🎙️ Ghi âm &amp; chấm điểm</button>
+      <ol id="chunks" class="chunks" hidden></ol>
       <div id="result" class="result" hidden>
         <div class="score"><span id="scoreNum">0</span><small>%</small></div>
-        <div>
-          <div class="heard-label">Word match:</div>
+        <div class="result-body">
+          <div class="label">So khớp từng từ:</div>
           <p id="diff" class="diff"></p>
-          <div class="heard-label">We heard: <em id="heard"></em></div>
+          <div class="label">Máy nghe được: <em id="heard"></em></div>
+          <ul id="tips" class="tips"></ul>
           <div class="compare">
-            <button id="playMine">▶ My recording</button>
-            <button id="playOrig">▶ Original</button>
+            <button id="playMine" class="small">▶ Giọng của tôi</button>
+            <button id="playOrig" class="small">▶ Giọng mẫu</button>
           </div>
         </div>
       </div>
@@ -100,21 +114,64 @@
     </div>
   </aside>
 
-  <!-- Voice settings -->
+  <!-- Role-play -->
+  <section id="rp" class="rp" hidden>
+    <header class="rp-head">
+      <div><strong>🎭 Nhập vai</strong> <span id="rpRound" class="meta"></span></div>
+      <button id="rpClose" class="icon ghost" aria-label="Đóng">✕</button>
+    </header>
+    <div class="rp-body">
+      <div id="rpSetup" class="rp-setup">
+        <h3>Bạn muốn đóng vai ai?</h3>
+        <div id="rpRoles" class="rp-roles"></div>
+        <h3>Mức gợi ý</h3>
+        <div class="rp-hints">
+          <label><input type="radio" name="rpHint" value="0" checked /> <span><b>Cả câu</b><small>Nhìn câu tiếng Anh và nói</small></span></label>
+          <label><input type="radio" name="rpHint" value="1" /> <span><b>Chữ cái đầu</b><small>D_ y__ h___ a t____ f__ t__?</small></span></label>
+          <label><input type="radio" name="rpHint" value="2" /> <span><b>Chỉ nghĩa tiếng Việt</b><small>Tự nói lại bằng tiếng Anh</small></span></label>
+        </div>
+        <p class="meta">💡 Chơi 3 vòng, mỗi vòng ít gợi ý hơn. Đến vòng 3 bạn sẽ tự nói được mà không cần nhìn chữ!</p>
+        <button id="rpStart" class="primary wide">Bắt đầu</button>
+      </div>
+      <ol id="rpChat" class="dialog rp-chat" hidden></ol>
+      <div id="rpEnd" class="rp-end" hidden>
+        <div class="score"><span id="rpScore">0</span><small>%</small></div>
+        <p id="rpEndMsg"></p>
+        <div class="rp-end-actions">
+          <button id="rpNext" class="primary wide">➡ Vòng tiếp (ít gợi ý hơn)</button>
+          <button id="rpAgain" class="wide">🔁 Chơi lại vòng này</button>
+          <button id="rpSwap" class="wide">🔄 Đổi vai</button>
+        </div>
+      </div>
+    </div>
+    <footer id="rpBar" class="rp-bar" hidden>
+      <p id="rpStatus" class="rp-status"></p>
+      <div class="rp-actions">
+        <button id="rpModel">🔊 Nghe mẫu</button>
+        <button id="rpMic" class="mic" aria-label="Nói">🎙️</button>
+        <button id="rpSkip">⏭ Tiếp</button>
+      </div>
+    </footer>
+  </section>
+
+  <!-- Settings -->
   <dialog id="settings">
     <form method="dialog">
-      <h3>Voices</h3>
-      <label>Speaker A <select id="voiceA"></select></label>
-      <label>Speaker B <select id="voiceB"></select></label>
-      <h3>AI quality</h3>
-      <label>AI model
+      <h3>Giọng đọc</h3>
+      <label>Người nói A <select id="voiceA"></select></label>
+      <label>Người nói B <select id="voiceB"></select></label>
+      <p class="meta">Giọng đọc lấy từ trình duyệt và điện thoại của bạn. Trên máy tính, Edge có giọng "Natural" rất tự nhiên.</p>
+      <h3>AI viết hội thoại</h3>
+      <label>Mô hình AI
         <select id="aiModel">
-          <option value="fast">Fast: Llama 3.2 1B (~900 MB download)</option>
-          <option value="better">Better quality: Llama 3.2 3B (~2.3 GB download, slower)</option>
+          <option value="fast">Nhanh: Llama 3.2 1B (tải ~900 MB)</option>
+          <option value="better">Chất lượng cao: Llama 3.2 3B (tải ~2.3 GB)</option>
         </select>
       </label>
-      <p class="meta">Voices come from your browser and operating system. Edge has very natural "Online (Natural)" voices.</p>
-      <button class="primary">Done</button>
+      <label class="toggle"><input type="checkbox" id="aiMode" /> Luôn để AI viết bài mới (kể cả chủ đề có sẵn)</label>
+      <h3>Sao lưu</h3>
+      <button id="importBtn2" type="button" class="small">⬆ Nhập file bài đã lưu</button>
+      <button class="primary wide">Xong</button>
     </form>
   </dialog>
 

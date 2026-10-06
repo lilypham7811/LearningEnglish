@@ -1,6 +1,12 @@
 # Shadow English
 
-Type a topic, get a conversation, listen to it, and shadow any sentence. No API keys and no backend.
+Everyday English speaking practice for Vietnamese learners, designed for phones. Type a topic (in English or Vietnamese), get a conversation, listen, shadow any sentence, then role-play it. No API keys and no backend.
+
+## Learning features
+
+- **Shadowing panel** (tap a sentence): 🔊 listen, 🐢 slow, 🧩 *chunks* (back-chaining: practise the end of the sentence first and add one thought group at a time), 🔁 shadow ×3, 🎙️ record and score with word-by-word feedback and tips for common Vietnamese pronunciation problems (final consonants, -s/-ed endings, "th").
+- **🎭 Role-play**: choose a character; the app speaks the other part and listens to yours. Three rounds with less help each time: full sentence → first letters (`D_ y__ h___…`) → Vietnamese meaning only.
+- **Vietnamese support**: Vietnamese UI, translations for every library line (🇻🇳 toggle), Vietnamese topic search (`gọi cà phê`, `hỏi đường`), Google Translate links for AI dialogs.
 
 ## Run
 
@@ -25,7 +31,7 @@ Then open http://localhost:8000 in **Chrome or Edge**.
 
 ## Adding topics
 
-Copy one object in `dialogs.js`, give it new `keywords`, `speakers` and `lines`.
+Copy one object in `dialogs.js` and give it new `keywords` (English), `viKeywords` (Vietnamese without accents), `speakers` and `lines` (`[speaker, English, Vietnamese]`).
 
 ## Keyboard shortcuts (shadow panel open)
 

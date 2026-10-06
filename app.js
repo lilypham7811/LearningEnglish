@@ -3,18 +3,24 @@
   const $ = (id) => document.getElementById(id);
   const synth = window.speechSynthesis;
   const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  const IS_PHONE = matchMedia("(pointer: coarse)").matches && Math.min(screen.width, screen.height) < 820;
+  const LEVEL_VI = { Beginner: "Cơ bản", Intermediate: "Trung cấp", Advanced: "Nâng cao", General: "Chung" };
 
   const state = {
-    dialog: null,        // { title, speakers, lines, source }
+    dialog: null,        // { id, title, titleVi?, speakers, lines: [speaker, en, vi?][], level, source, topic? }
     voices: [],
     voiceA: null,
     voiceB: null,
     rate: 0.9,
     playToken: 0,        // bump to cancel a running playback sequence
     selected: -1,        // index of line being shadowed
-    recording: null,     // { recorder, recognition, chunks }
+    recording: null,     // shadow-panel recording session
     myAudioUrl: null,
+    listening: null,     // active one-shot recognition (role-play)
     aiEngine: null,
+    aiModelId: null,
+    editing: false,
+    rp: null,            // role-play session
   };
 
   // ---------- Voices ----------
@@ -23,7 +29,7 @@
     if (!all.length) return;
     // Prefer natural/online voices, then US/GB.
     const rank = (v) =>
-      (/natural|online|neural/i.test(v.name) ? 0 : 2) + (/en[-_](US|GB)/i.test(v.lang) ? 0 : 1);
+      (/natural|online|neural|enhanced|premium/i.test(v.name) ? 0 : 2) + (/en[-_](US|GB)/i.test(v.lang) ? 0 : 1);
     state.voices = all.sort((a, b) => rank(a) - rank(b));
 
     const saved = safeGet("voices") || {};
@@ -38,9 +44,9 @@
       sel.value = cur ? cur.name : "";
     }
   }
-  // Try to pick a voice that sounds different (different name, ideally opposite gender keyword).
+  // Try to pick a voice that sounds different (ideally the opposite gender).
   function pickDifferentVoice(a) {
-    const female = /female|zira|aria|jenny|sonia|libby|samantha|susan|hazel|emma|ava|michelle|karen/i;
+    const female = /female|zira|aria|jenny|sonia|libby|samantha|susan|hazel|emma|ava|michelle|karen|natasha|moira|tessa|serena/i;
     const aFemale = a && female.test(a.name);
     return (
       state.voices.find((v) => v !== a && female.test(v.name) !== aFemale) ||
@@ -79,11 +85,18 @@
     const li = $("dialog").children[i];
     document.querySelectorAll(".line.active").forEach((el) => el.classList.remove("active"));
     li?.classList.add("active");
-    li?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    if (!state.rp) li?.scrollIntoView({ block: "nearest", behavior: "smooth" });
     const words = li ? [...li.querySelectorAll(".w")] : [];
     await speak(state.dialog.lines[i][1], voiceFor(i), rate, (ci) => highlightWord(words, ci));
     if (token === state.playToken) { li?.classList.remove("active"); clearWordHighlight(); }
     return token === state.playToken; // false = cancelled
+  }
+
+  // Speak any text in the voice of line i's speaker (chunks, role-play). Resolves false if cancelled.
+  async function say(text, i, rate = state.rate, token = ++state.playToken) {
+    synth.cancel();
+    await speak(text, voiceFor(i), rate);
+    return token === state.playToken;
   }
 
   async function playAll() {
@@ -104,31 +117,78 @@
     document.querySelectorAll(".w.on").forEach((el) => el.classList.remove("on"));
   }
 
-  // ---------- Dialog generation (no API) ----------
-  // "I want to practice a conversation about space travel" -> "space travel"
+  // One-shot speech recognition for a single sentence.
+  // Resolves { text, error, action }; state.listening.end(action) stops it early.
+  function listenOnce(maxMs, onInterim) {
+    return new Promise((resolve) => {
+      const r = new Recognition();
+      r.lang = "en-US";
+      r.interimResults = true;
+      r.continuous = false;
+      let text = "", error = null, done = false;
+      const finish = (action = null) => {
+        if (done) return;
+        done = true;
+        clearTimeout(timer);
+        state.listening = null;
+        resolve({ text: text.trim(), error, action });
+      };
+      r.onresult = (e) => { text = [...e.results].map((x) => x[0].transcript).join(" "); onInterim?.(text); };
+      r.onerror = (e) => { error = e.error; };
+      r.onend = () => finish();
+      const timer = setTimeout(() => { try { r.stop(); } catch { finish(); } }, maxMs);
+      state.listening = {
+        end(action) {
+          if (action) { try { r.abort(); } catch {} finish(action); }  // cancel/skip/model: drop what was heard
+          else { try { r.stop(); } catch { finish(); } }               // "I'm done talking": keep it
+        },
+      };
+      try { r.start(); } catch { error = "start-failed"; finish(); }
+    });
+  }
+
+  // ---------- Dialog sources (no API) ----------
+  const deaccent = (s) => s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/đ/g, "d");
+  const HAS_VIETNAMESE = /[àáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ]/i;
+
+  // "I want to practice a conversation about space travel" -> "space travel"; "hội thoại về đi chợ" -> "đi chợ"
   function cleanTopic(topic) {
     return topic.trim().replace(/\s+/g, " ").replace(/[.?!]+$/, "")
       .replace(/^(i (want|would like|'d like) to )?(talk|chat|learn|practi[cs]e|speak)( about| on)? /i, "")
       .replace(/^(an? )?(conversation|dialog(ue)?|chat)( about| on)? /i, "")
-      .replace(/^about /i, "") || topic.trim();
+      .replace(/^about /i, "")
+      .replace(/^(luyện nói|hội thoại|nói chuyện|chủ đề|tiếng anh)( về| khi)? /i, "")
+      .replace(/^(về|khi) /i, "") || topic.trim();
   }
 
   const STOPWORDS = new Set("a an the i im i'm me my we our you your to at in on of for and or with about is are was be want wanna would like go going get getting how what some new first".split(" "));
+  const VI_FILLER = ["hoi thoai", "noi chuyen", "luyen noi", "luyen", "chu de", "tieng anh", "ve", "o", "tai", "khi", "cach", "voi", "ban", "minh", "toi", "muon", "di", "goi", "mua", "thue", "lam", "nhu the nao"];
   const keywordHit = (w, k) => w === k || (w.length > 3 && (k.startsWith(w) || w.startsWith(k)));
+  const copyDialog = (d, source) => ({ ...d, lines: d.lines.map((l) => [...l]), source });
 
   // Returns the best library dialog, and whether it covers the whole topic
-  // ("order food" -> exact; "space travel" -> partial, because "space" isn't covered).
+  // ("order food" / "gọi cà phê" -> exact; "space travel" -> partial, because "space" isn't covered).
   function matchLibrary(topic) {
     const words = tokenize(topic).filter((w) => !STOPWORDS.has(w));
+    const vt = " " + deaccent(topic).replace(/[^a-z0-9 ]/g, " ").replace(/\s+/g, " ").trim() + " ";
     let best = null, bestScore = 0;
     for (const d of window.DIALOGS) {
       let score = 0;
       for (const w of words) for (const k of d.keywords) if (keywordHit(w, k)) score += w === k ? 3 : 1;
+      for (const k of d.viKeywords || []) if (vt.includes(" " + k + " ")) score += 3 + k.split(" ").length;
       if (score > bestScore) { bestScore = score; best = d; }
     }
     if (!best || bestScore < 2) return { best: null, exact: false };
-    const exact = words.every((w) => best.keywords.some((k) => keywordHit(w, k)));
-    return { best: { ...best, source: "Built-in library" }, exact };
+    const enExact = words.every((w) => best.keywords.some((k) => keywordHit(w, k)));
+    // Vietnamese: exact when every syllable belongs to one of the dialog's keywords or a filler word.
+    const syl = vt.trim().split(" ");
+    const covered = syl.map(() => false);
+    for (const k of [...(best.viKeywords || []), ...VI_FILLER]) {
+      const ks = k.split(" ");
+      for (let i = 0; i + ks.length <= syl.length; i++)
+        if (ks.every((x, j) => syl[i + j] === x)) ks.forEach((_, j) => { covered[i + j] = true; });
+    }
+    return { best: copyDialog(best, "Thư viện có sẵn"), exact: enExact || covered.every(Boolean) };
   }
 
   // Last resort when AI isn't available: fill a template with the topic.
@@ -142,7 +202,7 @@
       speakers: t.speakers,
       lines: t.lines.map(([s, txt]) => [s, txt.replaceAll("{topic}", lower)]),
       level: "General",
-      source: "Simple template (on-device AI isn't available in this browser)",
+      source: "Mẫu đơn giản (thiết bị này chưa chạy được AI)",
     };
   }
 
@@ -159,15 +219,19 @@
   const NAMES = ["Mia", "Leo", "Emma", "Jack", "Sofia", "Daniel", "Anna", "Tom", "Lily", "Ben", "Grace", "Ryan", "Chloe", "Max", "Olivia", "Sam", "Kate", "Noah", "Zoe", "Lucas"];
   const BAD_WORDS = /\b(fuck|shit|bitch|bastard|asshole|dick|pussy|slut|whore|nigg|retard)\w*/i;
   const MAX_ATTEMPTS = 3;
+  const currentModel = () => AI_MODELS[$("aiModel").value] || AI_MODELS.fast;
 
   async function loadEngine(model) {
     if (state.aiEngine && state.aiModelId === model.id) return state.aiEngine;
     const status = $("aiStatus");
-    status.textContent = `Starting the free on-device AI (${model.label})… The first time, the model downloads once (${model.size}); after that it loads from your browser cache.`;
+    status.textContent = `Đang khởi động AI miễn phí trên máy (${model.label})… Lần đầu sẽ tải mô hình một lần (${model.size}), các lần sau mở từ bộ nhớ trình duyệt.`;
     const webllm = await import("https://esm.run/@mlc-ai/web-llm");
     if (state.aiEngine) { await state.aiEngine.unload(); state.aiEngine = null; }
     state.aiEngine = await webllm.CreateMLCEngine(model.id, {
-      initProgressCallback: (p) => { status.textContent = p.text; },
+      initProgressCallback: (p) => {
+        const pct = Math.round((p.progress || 0) * 100);
+        status.textContent = `Đang tải AI: ${pct}% (${p.text})`;
+      },
     });
     state.aiModelId = model.id;
     return state.aiEngine;
@@ -177,16 +241,17 @@
     const L = LEVELS[level];
     return [
       { role: "system", content:
-        `You are an experienced English teacher who writes realistic conversations for ${level} (CEFR ${L.cefr}) learners. ${L.style} ` +
+        `You are an experienced English teacher who writes realistic everyday conversations for ${level} (CEFR ${L.cefr}) learners from Vietnam. ${L.style} ` +
         `Every sentence must be grammatically correct, natural, and something a real person would actually say. ` +
         `Stay on the topic. No narration, no stage directions, no emojis, no translations, no explanations.` },
       { role: "user", content:
         `Write a conversation between ${a} and ${b} about: "${topic}".\n` +
+        `(The topic may be written in Vietnamese. The conversation must be in English only.)\n` +
         `Rules:\n` +
         `- 10 to 14 lines. ${a} and ${b} take turns.\n` +
         `- Each line has at most ${L.maxWords} words.\n` +
         `- Open naturally, stay on the topic, and end the conversation naturally.\n` +
-        `- Include useful phrases a learner can reuse in real life.\n` +
+        `- Include useful phrases a learner can reuse in daily life.\n` +
         `Output only the conversation, one line per turn, in this format:\n${a}: ...\n${b}: ...` },
     ];
   }
@@ -195,15 +260,15 @@
   function checkQuality({ lines }, level) {
     const L = LEVELS[level];
     const p = [];
-    if (lines.length < 8) p.push("too short");
-    if (lines.length > 18) p.push("too long");
+    if (lines.length < 8) p.push("quá ngắn");
+    if (lines.length > 18) p.push("quá dài");
     const counts = [0, 0];
     lines.forEach(([s]) => counts[s]++);
-    if (Math.min(...counts) < 3) p.push("one speaker barely talks");
+    if (Math.min(...counts) < 3) p.push("một người gần như không nói");
     for (let i = 2; i < lines.length; i++)
-      if (lines[i][0] === lines[i - 1][0] && lines[i][0] === lines[i - 2][0]) { p.push("speakers don't take turns"); break; }
+      if (lines[i][0] === lines[i - 1][0] && lines[i][0] === lines[i - 2][0]) { p.push("hai người không thay phiên nhau"); break; }
     const seen = new Set();
-    if (lines.some(([, t]) => { const k = norm(t.replace(/\s/g, "")); return seen.has(k) || !seen.add(k); })) p.push("repeated lines");
+    if (lines.some(([, t]) => { const k = norm(t.replace(/\s/g, "")); return seen.has(k) || !seen.add(k); })) p.push("có câu bị lặp");
     // Same 3-word phrase in 3+ lines ("that way we", "that's a good idea") = lazy, repetitive writing.
     const phraseLines = new Map();
     lines.forEach(([, t]) => {
@@ -211,19 +276,19 @@
       new Set(w.slice(2).map((_, i) => w.slice(i, i + 3).join(" "))).forEach((ph) => phraseLines.set(ph, (phraseLines.get(ph) || 0) + 1));
     });
     const repeated = [...phraseLines].filter(([, n]) => n >= 3).map(([ph]) => `"${ph}"`);
-    if (repeated.length) p.push("repetitive phrases " + repeated.slice(0, 2).join(", "));
-    if (lines.filter(([, t]) => t.split(/\s+/).length > L.maxWords * 1.3).length > 2) p.push(`sentences too long for ${level}`);
-    if (lines.some(([, t]) => /[^\x00-\x7F‘’“”—–…éè]/.test(t))) p.push("non-English text");
-    if (lines.some(([, t]) => BAD_WORDS.test(t))) p.push("inappropriate language");
-    if (lines.some(([, t]) => /\b(as an ai|language model|here is (a|the) conversation)\b/i.test(t))) p.push("contains AI meta-text");
+    if (repeated.length) p.push("lặp cụm từ " + repeated.slice(0, 2).join(", "));
+    if (lines.filter(([, t]) => t.split(/\s+/).length > L.maxWords * 1.3).length > 2) p.push("câu quá dài so với trình độ");
+    if (lines.some(([, t]) => /[^\x00-\x7F‘’“”—–…éè]/.test(t))) p.push("có chữ không phải tiếng Anh");
+    if (lines.some(([, t]) => BAD_WORDS.test(t))) p.push("từ ngữ không phù hợp");
+    if (lines.some(([, t]) => /\b(as an ai|language model|here is (a|the) conversation)\b/i.test(t))) p.push("có lời thừa của AI");
     return p;
   }
 
   async function aiDialog(topic) {
-    if (!navigator.gpu) throw new Error("Your browser doesn't support WebGPU. Try the latest Chrome or Edge.");
+    if (!navigator.gpu) throw new Error("trình duyệt chưa hỗ trợ WebGPU.");
     const status = $("aiStatus");
     status.hidden = false;
-    const model = AI_MODELS[$("aiModel").value] || AI_MODELS.fast;
+    const model = currentModel();
     const level = $("level").value;
     const engine = await loadEngine(model);
     topic = cleanTopic(topic);
@@ -232,8 +297,8 @@
     let best = null;
     for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
       status.textContent = attempt === 1
-        ? `Writing a new ${level} dialog about "${topic}"…`
-        : `Attempt ${attempt} of ${MAX_ATTEMPTS}: the last one had problems (${best.problems.join(", ")}), trying again…`;
+        ? `AI đang viết bài ${LEVEL_VI[level].toLowerCase()} về "${topic}"…`
+        : `Lần ${attempt}/${MAX_ATTEMPTS}: bài trước chưa đạt (${best.problems.join(", ")}), đang viết lại…`;
       const names = [...NAMES].sort(() => Math.random() - 0.5);
       const reply = await engine.chat.completions.create({
         temperature: attempt === 1 ? 0.7 : 0.9,
@@ -247,14 +312,15 @@
       if (!best || problems.length < best.problems.length) best = { ...parsed, problems };
       if (!problems.length) break;
     }
-    if (best.lines.length < 4) throw new Error("The AI reply couldn't be understood. Please try again.");
+    if (best.lines.length < 4) throw new Error("không đọc được câu trả lời của AI. Hãy thử lại.");
 
     status.textContent = best.problems.length
-      ? `⚠ Best of ${MAX_ATTEMPTS} attempts, but some checks failed: ${best.problems.join(", ")}. Use ✏️ Edit to fix it, or 🔄 New version.`
-      : "✓ Passed all quality checks. Same topic again gives a different conversation.";
-    const title = topic.replace(/\b\w/g, (c) => c.toUpperCase());
-    return { title, topic, speakers: best.speakers, lines: best.lines, level, source: `On-device AI (${model.label})` };
+      ? `⚠ Bài tốt nhất sau ${MAX_ATTEMPTS} lần vẫn còn lỗi: ${best.problems.join(", ")}. Bấm ✏️ Sửa để chỉnh, hoặc 🔄 Bài khác.`
+      : "✓ Bài đã qua kiểm tra chất lượng. Cùng chủ đề sẽ ra bài khác mỗi lần.";
+    const title = HAS_VIETNAMESE.test(topic) ? topic : topic.replace(/\b\w/g, (c) => c.toUpperCase());
+    return { title, topic, speakers: best.speakers, lines: best.lines, level, source: `AI trên máy (${model.label})` };
   }
+
   function parseAiDialog(text) {
     const speakers = [];
     const lines = [];
@@ -270,11 +336,11 @@
         speakers.push(name);
         idx = speakers.length - 1;
       }
-      const text = m[2]
-        .replace(/\([^)]*\)|\[[^\]]*\]|\*[^*]+\*/g, "")        // (laughs) [smiles] *waves*
-        .replace(/\p{Extended_Pictographic}/gu, "")                 // emojis
+      const line = m[2]
+        .replace(/\([^)]*\)|\[[^\]]*\]|\*[^*]+\*/g, "")   // (laughs) [smiles] *waves*
+        .replace(/\p{Extended_Pictographic}/gu, "")        // emojis
         .replace(/^["“]|["”]$/g, "").replace(/\s+/g, " ").trim();
-      if (text) lines.push([idx, text]);
+      if (line) lines.push([idx, line]);
     }
     if (speakers.length < 2) speakers.push("Friend");
     const spare = ["Sam", "Mia", "Leo", "Nina"].filter((n) => !speakers.includes(n));
@@ -292,27 +358,27 @@
     if (isSaved(d.id)) {
       saved = saved.filter((x) => x.id !== d.id);
     } else {
-      const { id, title, speakers, lines, level, source } = d;
-      saved.unshift({ id, title, speakers, lines, level, source, savedAt: Date.now() });
+      const { id, title, titleVi, speakers, lines, level, source, topic } = d;
+      saved.unshift({ id, title, titleVi, speakers, lines, level, source, topic, savedAt: Date.now() });
     }
-    if (!safeSet("saved", saved)) alert("Couldn't save. Your browser may be blocking storage (private window?).");
+    if (!safeSet("saved", saved)) alert("Không lưu được. Có thể trình duyệt đang chặn bộ nhớ (chế độ ẩn danh?).");
     updateSaveBtn();
     renderSaved();
   }
   function updateSaveBtn() {
     const on = state.dialog && isSaved(state.dialog.id);
-    $("saveBtn").textContent = on ? "★ Saved" : "☆ Save";
+    $("saveBtn").textContent = on ? "★ Đã lưu" : "☆ Lưu";
     $("saveBtn").classList.toggle("saved", on);
   }
   function renderSaved() {
     const saved = getSaved();
-    $("savedSection").hidden = false;
+    $("savedSection").hidden = !saved.length; // import is also in settings, for a new device
     $("savedEmpty").hidden = saved.length > 0;
     $("exportBtn").disabled = !saved.length;
     $("savedList").innerHTML = saved.map((d) => `
       <li data-id="${esc(d.id)}">
-        <button class="open" title="Open">${esc(d.title)} <small>${new Date(d.savedAt).toLocaleDateString()}</small></button>
-        <button class="del ghost" title="Remove">✕</button>
+        <button class="open" title="Mở">${esc(d.titleVi || d.title)} <small>${new Date(d.savedAt).toLocaleDateString("vi-VN")}</small></button>
+        <button class="del ghost icon" aria-label="Xóa">✕</button>
       </li>`).join("");
   }
   function onSavedClick(e) {
@@ -321,12 +387,12 @@
     const d = getSaved().find((x) => x.id === li.dataset.id);
     if (!d) return;
     if (e.target.closest(".del")) {
-      if (!confirm(`Remove "${d.title}" from your saved dialogs?`)) return;
+      if (!confirm(`Xóa "${d.titleVi || d.title}" khỏi danh sách đã lưu?`)) return;
       safeSet("saved", getSaved().filter((x) => x.id !== d.id));
       renderSaved();
       if (state.dialog?.id === d.id) updateSaveBtn();
     } else if (e.target.closest(".open")) {
-      render({ ...d });
+      render(copyDialog(d, d.source));
     }
   }
 
@@ -335,7 +401,7 @@
     const blob = new Blob([JSON.stringify(getSaved(), null, 2)], { type: "application/json" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
-    a.download = `shadow-english-dialogs-${new Date().toISOString().slice(0, 10)}.json`;
+    a.download = `shadow-english-${new Date().toISOString().slice(0, 10)}.json`;
     a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 1000);
   }
@@ -350,9 +416,9 @@
       safeSet("saved", [...added, ...saved]);
       renderSaved();
       updateSaveBtn();
-      alert(`Imported ${added.length} dialog(s).`);
+      alert(`Đã nhập ${added.length} bài.`);
     } catch {
-      alert("That file isn't a Shadow English export.");
+      alert("File này không phải file sao lưu của Shadow English.");
     }
   }
 
@@ -365,7 +431,7 @@
       render(await aiDialog(d.topic || d.title));
     } catch (err) {
       $("aiStatus").hidden = false;
-      $("aiStatus").textContent = "The on-device AI couldn't run: " + err.message;
+      $("aiStatus").textContent = "AI trên máy không chạy được: " + err.message;
     } finally {
       $("regenBtn").disabled = false;
     }
@@ -377,7 +443,7 @@
       closeShadow();
       state.editing = true;
       document.body.classList.add("editing");
-      $("editBtn").textContent = "✓ Done editing";
+      $("editBtn").textContent = "✓ Xong";
       document.querySelectorAll("#dialog .text").forEach((el) => {
         el.textContent = el.textContent; // drop word spans while editing
         el.contentEditable = "plaintext-only";
@@ -385,11 +451,11 @@
       document.querySelector("#dialog .text")?.focus();
       return;
     }
-    // Copy the lines so editing never changes the built-in library.
     const texts = [...document.querySelectorAll("#dialog .text")].map((el) => el.textContent.replace(/\s+/g, " ").trim());
     const d = state.dialog;
-    d.lines = d.lines.map(([s, t], i) => [s, texts[i] || t]);
-    if (!/edited/.test(d.source)) d.source += " · edited";
+    // A changed sentence loses its old translation.
+    d.lines = d.lines.map(([s, t, vi], i) => (texts[i] && texts[i] !== t ? [s, texts[i]] : vi ? [s, t, vi] : [s, t]));
+    if (!/đã sửa/.test(d.source)) d.source += " · đã sửa";
     if (isSaved(d.id)) {
       safeSet("saved", getSaved().map((x) => (x.id === d.id ? { ...x, lines: d.lines, source: d.source } : x)));
       renderSaved();
@@ -398,29 +464,39 @@
   }
 
   // ---------- Rendering ----------
+  const gtLink = (text) => `https://translate.google.com/?sl=en&tl=vi&op=translate&text=${encodeURIComponent(text)}`;
+
   function render(d) {
     stopAll();
     closeShadow();
+    closeRoleplay();
     if (!d.id) d.id = "u" + Date.now(); // AI/template dialogs get an id so they can be saved
     state.dialog = d;
-    $("dialogSection").hidden = false;
-    $("dialogTitle").textContent = d.title;
-    $("dialogMeta").textContent = `${d.level} · ${d.speakers.join(" & ")} · ${d.source}`;
-    updateSaveBtn();
     state.editing = false;
     document.body.classList.remove("editing");
-    $("editBtn").textContent = "✏️ Edit";
+    $("editBtn").textContent = "✏️ Sửa";
     $("regenBtn").hidden = !navigator.gpu;
+    $("dialogSection").hidden = false;
+    $("dialogTitle").textContent = d.title;
+    $("dialogTitleVi").textContent = d.titleVi || "";
+    $("dialogMeta").textContent = `${LEVEL_VI[d.level] || d.level} · ${d.speakers.join(" & ")} · ${d.source}`;
+    const hasVi = d.lines.some((l) => l[2]);
+    $("showViWrap").hidden = !hasVi;
+    $("translateAll").hidden = hasVi;
+    $("translateAll").href = gtLink(d.lines.map((l) => l[1]).join("\n"));
+    updateSaveBtn();
+
     const ol = $("dialog");
     ol.innerHTML = "";
-    d.lines.forEach(([s, text], i) => {
+    d.lines.forEach(([s, text, vi], i) => {
       const li = document.createElement("li");
       li.className = "line " + (s === 0 ? "a" : "b");
       li.innerHTML = `
-        <button class="play" title="Listen">🔊</button>
-        <div class="bubble" title="Click to shadow this sentence">
+        <button class="play" aria-label="Nghe">🔊</button>
+        <div class="bubble">
           <div class="speaker">${esc(d.speakers[s])}</div>
           <div class="text">${wrapWords(text)}</div>
+          ${vi ? `<div class="vi">${esc(vi)}</div>` : ""}
         </div>`;
       li.querySelector(".play").onclick = () => playLine(i);
       li.querySelector(".bubble").onclick = () => { if (!state.editing) openShadow(i); };
@@ -440,27 +516,37 @@
   }
 
   // ---------- Shadowing ----------
+  const note = (t) => { $("shadowNote").textContent = t; };
+
   function openShadow(i) {
     stopAll();
     stopRecording(true);
     state.selected = i;
     document.querySelectorAll(".line.selected").forEach((el) => el.classList.remove("selected"));
-    $("dialog").children[i].classList.add("selected");
-    const [s, text] = state.dialog.lines[i];
+    const li = $("dialog").children[i];
+    li.classList.add("selected");
+    const [s, text, vi] = state.dialog.lines[i];
     $("shadowWho").textContent = state.dialog.speakers[s];
-    $("shadowPos").textContent = `Line ${i + 1} of ${state.dialog.lines.length}`;
+    $("shadowPos").textContent = `Câu ${i + 1}/${state.dialog.lines.length}`;
     $("shadowText").textContent = text;
+    $("shadowVi").innerHTML = vi
+      ? esc(vi)
+      : `<a href="${gtLink(text)}" target="_blank" rel="noopener">🌐 Xem nghĩa (Google Dịch)</a>`;
     $("result").hidden = true;
+    $("chunks").hidden = true;
     $("prevLine").disabled = i === 0;
     $("nextLine").disabled = i === state.dialog.lines.length - 1;
-    $("shadowNote").textContent = Recognition
-      ? "Tip: Listen first, then press Record and say the sentence. Press again to stop."
-      : "Your browser can't check pronunciation (use Chrome or Edge), but you can still record and compare.";
+    note(Recognition
+      ? "Cách luyện: 🔊 Nghe → 🧩 Từng cụm → 🔁 Nhại ×3 → 🎙️ Ghi âm để chấm điểm."
+      : "Trình duyệt này không chấm điểm phát âm được (hãy dùng Chrome), nhưng bạn vẫn ghi âm và so sánh được.");
     $("shadow").hidden = false;
+    document.body.classList.add("shadow-open");
+    setTimeout(() => li.scrollIntoView({ block: "center", behavior: "smooth" }), 50);
   }
   function closeShadow() {
     stopRecording(true);
     $("shadow").hidden = true;
+    document.body.classList.remove("shadow-open");
     document.querySelectorAll(".line.selected").forEach((el) => el.classList.remove("selected"));
     state.selected = -1;
   }
@@ -469,15 +555,70 @@
   async function shadowLoop(times = 3) {
     const token = ++state.playToken;
     for (let n = 0; n < times; n++) {
-      $("shadowNote").textContent = `Round ${n + 1} of ${times}: listen…`;
+      note(`Lần ${n + 1}/${times}: nghe…`);
       const t0 = performance.now();
       if (!(await playLine(state.selected, state.rate, token))) return;
       const dur = performance.now() - t0;
-      $("shadowNote").textContent = `Round ${n + 1} of ${times}: now you say it!`;
+      note(`Lần ${n + 1}/${times}: giờ bạn nói theo!`);
       await wait(Math.max(1500, dur * 1.3));
       if (token !== state.playToken) return;
     }
-    $("shadowNote").textContent = "Nice work! Press Record to check your pronunciation.";
+    note("Tốt lắm! Bấm 🎙️ Ghi âm để chấm điểm phát âm.");
+  }
+
+  // Split a sentence into natural thought groups: at punctuation, then long parts before a
+  // joining word or a determiner (so "their requirements" or "a week" stay together).
+  const JOIN = /^(and|but|or|so|because|if|when|to|for|with|at|in|on|of|that|which|who|from|before|after|while|than|about|a|an|the|my|your|his|her|our|their|this|these|those|some)$/i;
+  function splitChunks(text) {
+    const parts = (text.match(/[^,.;:!?]+[,.;:!?]*/g) || [text]).map((s) => s.trim()).filter(Boolean);
+    const splitLong = (p) => {
+      const w = p.split(/\s+/);
+      if (w.length <= 5) return [p];
+      let cut = -1, bestDist = Infinity;
+      for (let i = 2; i <= w.length - 2; i++) {
+        if (!JOIN.test(w[i].replace(/[^a-z']/gi, ""))) continue;
+        const dist = Math.abs(i - w.length / 2);
+        if (dist < bestDist) { bestDist = dist; cut = i; }
+      }
+      if (cut < 0) {
+        if (w.length <= 7) return [p];
+        cut = Math.ceil(w.length / 2);
+      }
+      return [...splitLong(w.slice(0, cut).join(" ")), ...splitLong(w.slice(cut).join(" "))];
+    };
+    return parts.flatMap(splitLong);
+  }
+
+  // Back-chaining: practise the END of the sentence first, then add one chunk at a time to the front.
+  // The learner always finishes with the natural sentence-final intonation, and never repeats more than they can hold.
+  async function chunkPractice() {
+    const i = state.selected;
+    const text = state.dialog.lines[i][1];
+    // Build up one sentence at a time, so a step is never longer than one sentence (until the final run).
+    const sentences = (text.match(/[^.!?]+[.!?]*/g) || [text]).map((x) => x.trim()).filter(Boolean);
+    const steps = [];
+    for (const sentence of sentences) {
+      const chunks = splitChunks(sentence);
+      for (let k = chunks.length - 1; k >= 0; k--) steps.push(chunks.slice(k).join(" "));
+    }
+    if (steps.length < 2) { note("Câu này đã ngắn rồi. Hãy dùng 🔁 Nhại ×3."); return; }
+    steps.push(text); // the whole line at the end
+    const ol = $("chunks");
+    ol.innerHTML = steps.map((s) => `<li>${esc(s)}</li>`).join("");
+    ol.hidden = false;
+    $("result").hidden = true;
+    const token = ++state.playToken;
+    for (let n = 0; n < steps.length; n++) {
+      [...ol.children].forEach((li, j) => { li.className = j < n ? "done" : j === n ? "now" : ""; });
+      note(`Bước ${n + 1}/${steps.length}: nghe…`);
+      const t0 = performance.now();
+      if (!(await say(steps[n], i, state.rate, token))) return;
+      note(`Bước ${n + 1}/${steps.length}: giờ bạn nói theo!`);
+      await wait(Math.max(1200, (performance.now() - t0) * 1.4));
+      if (token !== state.playToken) return;
+    }
+    [...ol.children].forEach((li) => { li.className = "done"; });
+    note("Tuyệt! Giờ bấm 🎙️ Ghi âm để nói cả câu và chấm điểm.");
   }
 
   async function toggleRecording() {
@@ -487,40 +628,53 @@
     try {
       stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     } catch {
-      $("shadowNote").textContent = "Microphone access was blocked. Allow the mic in your browser's address bar and try again.";
+      note("Không dùng được micro. Hãy cho phép micro trong trình duyệt rồi thử lại.");
       return;
     }
-    const rec = { chunks: [], stream, transcript: "", finished: false };
+    const rec = { chunks: [], stream, transcript: "", retried: false, noAudio: false };
     rec.recorder = new MediaRecorder(stream);
     rec.recorder.ondataavailable = (e) => e.data.size && rec.chunks.push(e.data);
     rec.recorder.onstop = () => {
       if (state.myAudioUrl) URL.revokeObjectURL(state.myAudioUrl);
-      state.myAudioUrl = URL.createObjectURL(new Blob(rec.chunks, { type: rec.recorder.mimeType }));
+      state.myAudioUrl = rec.noAudio || !rec.chunks.length
+        ? null
+        : URL.createObjectURL(new Blob(rec.chunks, { type: rec.recorder.mimeType }));
       stream.getTracks().forEach((t) => t.stop());
     };
     rec.recorder.start();
-
-    if (Recognition) {
-      const r = new Recognition();
-      r.lang = "en-US";
-      r.interimResults = true;
-      r.continuous = true;
-      r.onresult = (e) => {
-        rec.transcript = [...e.results].map((x) => x[0].transcript).join(" ");
-        $("shadowNote").textContent = "Hearing: " + rec.transcript;
-      };
-      r.onerror = (e) => {
-        if (e.error === "not-allowed") $("shadowNote").textContent = "Speech recognition was blocked. You can still compare recordings.";
-        else if (e.error === "network") $("shadowNote").textContent = "Speech recognition needs an internet connection in this browser.";
-      };
-      r.onend = () => { if (state.recording === rec) stopRecording(); };
-      r.start();
-      rec.recognition = r;
-    }
     state.recording = rec;
+    if (Recognition) startRecognition(rec);
     $("recordBtn").classList.add("on");
-    $("recordBtn").textContent = "⏹ Stop";
-    $("shadowNote").textContent = "Recording… say the sentence.";
+    $("recordBtn").textContent = "⏹ Dừng";
+    note("Đang ghi âm… hãy nói câu này. Nói xong bấm Dừng.");
+  }
+
+  function startRecognition(rec) {
+    const r = new Recognition();
+    r.lang = "en-US";
+    r.interimResults = true;
+    r.continuous = true;
+    r.onresult = (e) => {
+      rec.transcript = [...e.results].map((x) => x[0].transcript).join(" ");
+      note("Đang nghe: " + rec.transcript);
+    };
+    r.onerror = (e) => {
+      if (e.error === "audio-capture" && !rec.retried) {
+        // Some phones can't record and recognise at the same time: keep the scoring, drop the recording.
+        rec.retried = true;
+        rec.noAudio = true;
+        rec.recognition = null;
+        if (rec.recorder.state !== "inactive") rec.recorder.stop();
+        setTimeout(() => { if (state.recording === rec) startRecognition(rec); }, 250);
+      } else if (e.error === "not-allowed" || e.error === "service-not-allowed") {
+        note("Trình duyệt chặn nhận dạng giọng nói. Bạn vẫn có thể nghe lại bản ghi âm.");
+      } else if (e.error === "network") {
+        note("Chấm điểm cần kết nối Internet.");
+      }
+    };
+    r.onend = () => { if (state.recording === rec && rec.recognition === r) stopRecording(); };
+    rec.recognition = r;
+    try { r.start(); } catch {}
   }
 
   function stopRecording(silent = false) {
@@ -528,7 +682,7 @@
     if (!rec) return;
     state.recording = null;
     $("recordBtn").classList.remove("on");
-    $("recordBtn").textContent = "🎙️ Record";
+    $("recordBtn").textContent = "🎙️ Ghi âm & chấm điểm";
     try { rec.recognition?.stop(); } catch {}
     if (rec.recorder.state !== "inactive") rec.recorder.stop();
     if (silent) return;
@@ -538,23 +692,226 @@
 
   function showResult(transcript) {
     $("result").hidden = false;
+    $("chunks").hidden = true;
+    setTimeout(() => { $("playMine").disabled = !state.myAudioUrl; }, 100);
     const target = state.dialog.lines[state.selected][1];
     if (!Recognition) {
       $("scoreNum").textContent = "–";
       $("diff").textContent = target;
-      $("heard").textContent = "(speech checking isn't supported in this browser)";
+      $("heard").textContent = "(trình duyệt này không hỗ trợ chấm điểm)";
+      $("tips").innerHTML = "";
       return;
     }
-    const { html, score } = compareWords(target, transcript);
+    const { html, score, missed } = compareWords(target, transcript);
     $("scoreNum").textContent = score;
     $("diff").innerHTML = html;
-    $("heard").textContent = transcript || "(nothing — try speaking a bit louder)";
-    $("shadowNote").textContent =
-      score >= 90 ? "Excellent! 🎉 Try the next line." :
-      score >= 70 ? "Good job! Listen again and focus on the red words." :
-      "Keep practising. Try Slow mode, then Shadow ×3.";
+    $("heard").textContent = transcript || "(không nghe thấy gì, hãy nói to hơn một chút)";
+    $("tips").innerHTML = transcript ? pronunciationTips(missed).map((t) => `<li>${t}</li>`).join("") : "";
+    note(
+      score >= 90 ? "Xuất sắc! 🎉 Chuyển sang câu tiếp theo nhé." :
+      score >= 70 ? "Tốt lắm! Nghe lại và chú ý các từ màu đỏ." :
+      "Cố lên! Thử 🐢 Chậm và 🧩 Từng cụm, rồi ghi âm lại."
+    );
   }
 
+  // Tips for the pronunciation problems Vietnamese speakers most often have.
+  function pronunciationTips(missed) {
+    const tips = new Set();
+    for (const raw of missed) {
+      const w = raw.toLowerCase().replace(/[^a-z']/g, "");
+      if (/^th/.test(w)) tips.add("<b>Âm “th”</b> (<i>think, the</i>): đặt đầu lưỡi giữa hai hàm răng rồi đẩy hơi ra. Đừng đọc thành “t”, “d” hay “s”.");
+      if (/ed$/.test(w) && w.length > 3) tips.add("<b>Đuôi -ed</b>: đọc /t/, /d/ hoặc /ɪd/ (<i>worked, played, wanted</i>). Đừng bỏ âm này.");
+      else if (/([^s']s|es|'s)$/.test(w) && w.length > 2) tips.add("<b>Âm cuối /s/ /z/</b> (<i>books, it's, she likes</i>): người Việt hay bỏ âm này. Hãy đọc rõ tiếng “xì” ở cuối.");
+      else if (/[tkpdgbfvzlm]$/.test(w) || /(ch|sh|ge|ve|ce|se|ke|te|pe)$/.test(w)) tips.add("<b>Đừng nuốt âm cuối</b>: tiếng Anh phải đọc rõ phụ âm cuối (<i>like, that, stop, food</i>). “Like” khác “lie”!");
+      if (tips.size >= 2) break;
+    }
+    return [...tips].slice(0, 2);
+  }
+
+  // ---------- Role-play ----------
+  const HINT_NAMES = ["Vòng 1: cả câu", "Vòng 2: chữ cái đầu", "Vòng 3: chỉ nghĩa tiếng Việt"];
+  const rpStatus = (t) => { $("rpStatus").textContent = t; };
+  const firstLetters = (text) => text.replace(/[A-Za-z]+(?:'[A-Za-z]+)?/g, (w) => w[0] + w.slice(1).replace(/[A-Za-z]/g, "_"));
+
+  function openRoleplay() {
+    if (state.editing) toggleEdit();
+    stopAll();
+    closeShadow();
+    const d = state.dialog;
+    state.rp = { role: state.rp?.role ?? 1, hint: 0, token: 0, scores: [], resolve: null };
+    renderRoles();
+    document.querySelector('input[name="rpHint"][value="0"]').checked = true;
+    // Without Vietnamese translations, round 3 shows only the word count.
+    document.querySelector('input[name="rpHint"][value="2"]').nextElementSibling.querySelector("small").textContent =
+      d.lines.some((l) => l[2]) ? "Tự nói lại bằng tiếng Anh" : "Bài này chưa có nghĩa tiếng Việt: chỉ hiện số từ, bạn tự nhớ lại câu";
+    $("rpRound").textContent = "";
+    showRpView("setup");
+    $("rp").hidden = false;
+    document.body.classList.add("rp-open");
+  }
+  function renderRoles() {
+    const d = state.dialog;
+    $("rpRoles").innerHTML = d.speakers.map((n, s) => {
+      const count = d.lines.filter((l) => l[0] === s).length;
+      return `<button data-s="${s}" class="${s === state.rp.role ? "on" : ""}">${esc(n)}<small>${count} câu</small></button>`;
+    }).join("");
+  }
+  // Scroll only the role-play's own area (scrollIntoView would also scroll the page behind it).
+  function rpScrollEnd() {
+    const body = $("rp").querySelector(".rp-body");
+    body.scrollTo({ top: body.scrollHeight, behavior: "smooth" });
+  }
+  function showRpView(v) {
+    $("rpSetup").hidden = v !== "setup";
+    $("rpChat").hidden = v === "setup";
+    $("rpBar").hidden = v !== "chat";
+    $("rpEnd").hidden = v !== "end";
+  }
+  function closeRoleplay() {
+    const rp = state.rp;
+    if (!rp) return;
+    rp.token++;
+    state.listening?.end("cancel");
+    if (rp.resolve) { const r = rp.resolve; rp.resolve = null; r("cancel"); }
+    stopAll();
+    $("rp").hidden = true;
+    document.body.classList.remove("rp-open");
+    state.rp = null;
+  }
+  // Wait for the learner to press a role-play button: "retry" | "model" | "skip" | "cancel".
+  const rpWaitAction = () => new Promise((res) => { state.rp.resolve = res; });
+  function rpButton(action) {
+    const rp = state.rp;
+    if (!rp) return;
+    if (state.listening) { state.listening.end(action === "retry" ? null : action); return; }
+    if (rp.resolve) { const r = rp.resolve; rp.resolve = null; r(action); }
+  }
+
+  function rpBubble(i, mine) {
+    const d = state.dialog;
+    const [s, text, vi] = d.lines[i];
+    const viHtml = vi ? `<div class="vi">${esc(vi)}</div>` : "";
+    let body;
+    if (!mine || state.rp.hint === 0) body = `<div class="text">${esc(text)}</div>${viHtml}`;
+    else if (state.rp.hint === 1) body = `<div class="text hint-letters">${esc(firstLetters(text))}</div>${viHtml}`;
+    else body = vi
+      ? `<div class="text cue">🇻🇳 ${esc(vi)}</div>`
+      : `<div class="text cue">(Hãy nhớ lại câu này: ${text.split(/\s+/).length} từ)</div>`;
+    const li = document.createElement("li");
+    li.className = "line " + (mine ? "b mine" : "a");
+    li.innerHTML = `<div class="bubble"><div class="speaker">${esc(d.speakers[s])}${mine ? " (bạn)" : ""}</div>${body}</div>`;
+    $("rpChat").appendChild(li);
+    rpScrollEnd();
+    return li;
+  }
+  // Show the real sentence (coloured by match) in the learner's bubble.
+  function rpReveal(li, i, result) {
+    const [s, text, vi] = state.dialog.lines[i];
+    const badge = result
+      ? `<span class="badge ${result.score >= 80 ? "good" : result.score >= 60 ? "ok" : "low"}">${result.score}%</span>`
+      : "";
+    li.querySelector(".bubble").innerHTML = `<div class="speaker">${esc(state.dialog.speakers[s])} (bạn)</div>
+      <div class="text">${result ? result.html : esc(text)}</div>${vi ? `<div class="vi">${esc(vi)}</div>` : ""}${badge}`;
+    li.classList.add("done");
+  }
+
+  async function rpRun() {
+    const rp = state.rp, d = state.dialog;
+    const token = ++rp.token;
+    rp.scores = [];
+    $("rpChat").innerHTML = "";
+    $("rpRound").textContent = `· Bạn là ${d.speakers[rp.role]} · ${HINT_NAMES[rp.hint]}`;
+    showRpView("chat");
+    for (let i = 0; i < d.lines.length; i++) {
+      if (token !== rp.token) return;
+      const mine = d.lines[i][0] === rp.role;
+      const li = rpBubble(i, mine);
+      if (!mine) {
+        rpStatus(`${d.speakers[d.lines[i][0]]} đang nói…`);
+        await say(d.lines[i][1], i);
+        if (token !== rp.token) return;
+        await wait(250);
+      } else {
+        await rpUserTurn(i, li, token);
+      }
+    }
+    if (token === rp.token) rpFinish();
+  }
+
+  async function rpUserTurn(i, li, token) {
+    const rp = state.rp;
+    const text = state.dialog.lines[i][1];
+    let best = 0, tried = false;
+    // "model" plays the sentence and goes round again; other actions are returned as-is.
+    const handle = async (action) => {
+      if (action === "model") { rpStatus("🔊 Câu mẫu…"); await say(text, i, Math.max(0.6, state.rate - 0.1)); return "again"; }
+      return action;
+    };
+    const skip = () => { if (!tried) rpReveal(li, i, null); rp.scores.push(best); };
+    while (true) {
+      if (token !== rp.token) return;
+      if (!Recognition) {
+        rpStatus("Hãy nói câu của bạn, rồi bấm ⏭ Tiếp. (Trình duyệt này không chấm điểm được.)");
+        const a = await handle(await rpWaitAction());
+        if (a === "cancel") return;
+        if (a === "skip") { rpReveal(li, i, null); return; }
+        continue;
+      }
+      rpStatus(tried ? "🎙️ Nói lại nào!" : "🎙️ Đến lượt bạn, hãy nói!");
+      $("rpMic").classList.add("on");
+      const res = await listenOnce(15000, (t) => rpStatus("🎙️ " + t));
+      $("rpMic").classList.remove("on");
+      if (token !== rp.token) return;
+      if (res.action) {
+        const a = await handle(res.action);
+        if (a === "cancel") return;
+        if (a === "skip") return skip();
+        continue;
+      }
+      if (!res.text) {
+        rpStatus(res.error === "not-allowed" || res.error === "service-not-allowed"
+          ? "Micro bị chặn. Hãy cho phép micro trong trình duyệt, rồi bấm 🎙️."
+          : res.error === "network"
+            ? "Chấm điểm cần Internet. Kiểm tra mạng rồi bấm 🎙️ để nói lại."
+            : "Chưa nghe thấy gì. Bấm 🎙️ để nói lại, 🔊 để nghe mẫu, hoặc ⏭ để bỏ qua.");
+        const a = await handle(await rpWaitAction());
+        if (a === "cancel") return;
+        if (a === "skip") return skip();
+        continue;
+      }
+      tried = true;
+      const result = compareWords(text, res.text);
+      best = Math.max(best, result.score);
+      rpReveal(li, i, result);
+      if (result.score >= 60) {
+        rpStatus(result.score >= 90 ? "Xuất sắc! 🎉" : "Tốt lắm! 👍");
+        rp.scores.push(best);
+        await wait(900);
+        return;
+      }
+      rpStatus(`${result.score}%: thử lại nhé! 🎙️ nói lại · 🔊 nghe mẫu · ⏭ đi tiếp`);
+      const a = await handle(await rpWaitAction());
+      if (a === "cancel") return;
+      if (a === "skip") return skip();
+    }
+  }
+
+  function rpFinish() {
+    const rp = state.rp;
+    const avg = rp.scores.length ? Math.round(rp.scores.reduce((a, b) => a + b, 0) / rp.scores.length) : 0;
+    $("rpScore").textContent = Recognition ? avg : "✓";
+    const last = rp.hint >= 2;
+    $("rpEndMsg").textContent = !Recognition
+      ? "Hoàn thành vòng này!"
+      : avg >= 85 ? (last ? "Tuyệt vời! Bạn đã nói được cả bài mà không cần nhìn chữ. 🏆" : "Rất tốt! Sẵn sàng cho vòng khó hơn.")
+      : avg >= 60 ? "Khá lắm! Chơi lại một lần nữa sẽ tốt hơn nhiều."
+      : "Cố lên! Hãy luyện từng câu bằng 🧩 Từng cụm, rồi quay lại nhập vai.";
+    $("rpNext").hidden = last;
+    showRpView("end");
+    rpScrollEnd();
+  }
+
+  // ---------- Scoring ----------
   // Word-level match using the longest common subsequence.
   function compareWords(target, spoken) {
     const display = target.split(/\s+/);
@@ -572,9 +929,8 @@
     }
     const html = display.map((w, i) => `<span class="${hit[i] ? "hit" : "miss"}">${esc(w)}</span>`).join(" ");
     const score = t.length ? Math.round((hit.filter(Boolean).length / t.length) * 100) : 0;
-    return { html, score };
+    return { html, score, missed: display.filter((_, i) => !hit[i]) };
   }
-  // Normalise a word so "Don't" == "dont", "10" == "ten", etc.
   const ONES = "zero one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen seventeen eighteen nineteen".split(" ");
   const TENS = "_ _ twenty thirty forty fifty sixty seventy eighty ninety".split(" ");
   function numToWords(n) {
@@ -595,11 +951,19 @@
   function safeGet(k) { try { return JSON.parse(localStorage.getItem("se_" + k)); } catch { return null; } }
   function safeSet(k, v) { try { localStorage.setItem("se_" + k, JSON.stringify(v)); return true; } catch { return false; } }
 
+  function updateAiNote() {
+    const m = currentModel();
+    $("aiNote").textContent = navigator.gpu
+      ? `✨ Chủ đề nào cũng được: chủ đề có sẵn mở ngay; chủ đề mới do AI miễn phí chạy ngay trên máy bạn viết (không cần API). Lần đầu tải mô hình một lần (${m.size})${IS_PHONE ? ", nên dùng Wi-Fi" : ""}.`
+      : "✨ Chủ đề có sẵn mở ngay. Trình duyệt này chưa chạy được AI trên máy, nên hãy chọn một chủ đề bên dưới.";
+  }
+
   // ---------- Wire up ----------
   async function onSubmit(e) {
     e?.preventDefault();
     const topic = $("topicInput").value.trim();
     if (!topic) return $("topicInput").focus();
+    $("topicInput").blur(); // close the phone keyboard
     const btn = $("topicForm").querySelector("button");
     const { best, exact } = matchLibrary(cleanTopic(topic));
     $("aiStatus").hidden = true;
@@ -610,62 +974,79 @@
     // 2. Anything else: write a new dialog with the free on-device AI.
     if (navigator.gpu) {
       btn.disabled = true;
-      btn.textContent = "Writing…";
+      btn.textContent = "Đang viết…";
       try {
         return render(await aiDialog(topic));
       } catch (err) {
         $("aiStatus").hidden = false;
-        $("aiStatus").textContent = "The on-device AI couldn't run: " + err.message;
+        $("aiStatus").textContent = "AI trên máy không chạy được: " + err.message;
       } finally {
         btn.disabled = false;
-        btn.textContent = "Create dialog";
+        btn.textContent = "Tạo hội thoại";
       }
     } else {
       $("aiStatus").hidden = false;
-      $("aiStatus").textContent = "This browser can't run the on-device AI (needs WebGPU: latest Chrome or Edge), so a simpler dialog is shown.";
+      $("aiStatus").textContent = "Thiết bị này chưa chạy được AI (cần Chrome hoặc Edge mới).";
     }
 
-    // 3. Fallback: closest library dialog, or a template.
-    render(best || templateDialog(topic));
+    // 3. Fallback: closest library dialog, or a template (English topics only: a Vietnamese topic inside English sentences makes no sense).
+    if (best) return render(best);
+    if (HAS_VIETNAMESE.test(topic)) {
+      $("aiStatus").textContent += " Chưa có bài cho chủ đề này. Hãy chọn một chủ đề có sẵn bên dưới.";
+      return;
+    }
+    render(templateDialog(topic));
   }
 
   function init() {
     if (!synth) {
-      document.body.insertAdjacentHTML("afterbegin", `<p style="background:#fee;padding:10px;text-align:center">Your browser doesn't support text-to-speech. Please use Chrome, Edge or Safari.</p>`);
+      document.body.insertAdjacentHTML("afterbegin", `<p style="background:#fee;color:#900;padding:10px;text-align:center;margin:0">Trình duyệt này không đọc được tiếng Anh. Hãy dùng Chrome, Edge hoặc Safari.</p>`);
     } else {
       loadVoices();
       synth.onvoiceschanged = loadVoices;
     }
 
-    $("chips").innerHTML = window.DIALOGS.map((d) => `<button data-t="${esc(d.keywords[0])}">${d.emoji} ${esc(d.title)}</button>`).join("");
+    $("chips").innerHTML = window.DIALOGS.map((d) =>
+      `<button data-id="${d.id}">${d.emoji} <span>${esc(d.titleVi)}<small>${esc(d.title)}</small></span></button>`).join("");
     $("chips").onclick = (e) => {
       const b = e.target.closest("button");
-      if (b) { $("topicInput").value = b.dataset.t; onSubmit(); }
+      const d = b && window.DIALOGS.find((x) => x.id === b.dataset.id);
+      if (d) render(copyDialog(d, "Thư viện có sẵn"));
     };
 
-    $("topicForm").onsubmit = onSubmit;
-    $("aiMode").checked = !!safeGet("alwaysAi");
-    $("aiMode").onchange = () => safeSet("alwaysAi", $("aiMode").checked);
-    $("playAllBtn").onclick = playAll;
-    $("stopBtn").onclick = stopAll;
-    $("saveBtn").onclick = toggleSave;
-    $("regenBtn").onclick = regenerate;
-    $("editBtn").onclick = toggleEdit;
+    // Preferences
+    $("aiModel").value = IS_PHONE ? "fast" : "better";
     for (const id of ["level", "aiModel"]) {
       const v = safeGet(id);
       if (v) $(id).value = v;
-      $(id).onchange = () => safeSet(id, $(id).value);
+      $(id).onchange = () => { safeSet(id, $(id).value); updateAiNote(); };
     }
+    $("aiMode").checked = !!safeGet("alwaysAi");
+    $("aiMode").onchange = () => safeSet("alwaysAi", $("aiMode").checked);
+    $("showVi").checked = !!safeGet("showVi");
+    document.body.classList.toggle("show-vi", $("showVi").checked);
+    $("showVi").onchange = (e) => { document.body.classList.toggle("show-vi", e.target.checked); safeSet("showVi", e.target.checked); };
+    updateAiNote();
+
+    $("topicForm").onsubmit = onSubmit;
+    $("playAllBtn").onclick = playAll;
+    $("stopBtn").onclick = stopAll;
+    $("roleplayBtn").onclick = openRoleplay;
+    $("saveBtn").onclick = toggleSave;
+    $("regenBtn").onclick = regenerate;
+    $("editBtn").onclick = toggleEdit;
     $("savedList").onclick = onSavedClick;
     $("exportBtn").onclick = exportSaved;
-    $("importBtn").onclick = () => $("importFile").click();
+    $("importBtn").onclick = $("importBtn2").onclick = () => $("importFile").click();
     $("importFile").onchange = (e) => { if (e.target.files[0]) importSaved(e.target.files[0]); e.target.value = ""; };
     renderSaved();
     $("rate").oninput = (e) => { state.rate = +e.target.value; $("rateVal").textContent = state.rate.toFixed(2).replace(/0$/, "") + "×"; };
     $("hideText").onchange = (e) => document.body.classList.toggle("hide-text", e.target.checked);
 
+    // Shadow panel
     $("listenBtn").onclick = () => playLine(state.selected);
     $("slowBtn").onclick = () => playLine(state.selected, Math.max(0.5, state.rate - 0.3));
+    $("chunkBtn").onclick = chunkPractice;
     $("loopBtn").onclick = () => shadowLoop(3);
     $("recordBtn").onclick = toggleRecording;
     $("prevLine").onclick = () => openShadow(state.selected - 1);
@@ -674,11 +1055,28 @@
     $("playMine").onclick = () => { if (state.myAudioUrl) { stopAll(); new Audio(state.myAudioUrl).play(); } };
     $("playOrig").onclick = () => playLine(state.selected);
 
+    // Role-play
+    $("rpClose").onclick = closeRoleplay;
+    $("rpRoles").onclick = (e) => {
+      const b = e.target.closest("button");
+      if (b) { state.rp.role = +b.dataset.s; renderRoles(); }
+    };
+    $("rpStart").onclick = () => {
+      state.rp.hint = +document.querySelector('input[name="rpHint"]:checked').value;
+      rpRun();
+    };
+    $("rpMic").onclick = () => rpButton("retry");
+    $("rpModel").onclick = () => rpButton("model");
+    $("rpSkip").onclick = () => rpButton("skip");
+    $("rpNext").onclick = () => { state.rp.hint = Math.min(2, state.rp.hint + 1); rpRun(); };
+    $("rpAgain").onclick = () => rpRun();
+    $("rpSwap").onclick = () => { state.rp.role = 1 - state.rp.role; state.rp.hint = 0; rpRun(); };
+
     $("settingsBtn").onclick = () => $("settings").showModal();
     $("voiceA").onchange = $("voiceB").onchange = saveVoices;
 
     document.addEventListener("keydown", (e) => {
-      if (state.selected < 0 || e.target.matches("input, select, textarea")) return;
+      if (state.rp || state.selected < 0 || e.target.matches("input, select, textarea, [contenteditable]")) return;
       if (e.key === "ArrowRight" && state.selected < state.dialog.lines.length - 1) openShadow(state.selected + 1);
       else if (e.key === "ArrowLeft" && state.selected > 0) openShadow(state.selected - 1);
       else if (e.key === " ") { e.preventDefault(); playLine(state.selected); }
