@@ -7,9 +7,9 @@
   "action": { "default_title": "Save to LearningEnglish (Alt+Shift+S)" },
   "background": { "service_worker": "background.js" },
   "permissions": ["contextMenus", "scripting", "activeTab", "storage"],
-  "host_permissions": ["http://localhost:8000/*"],
+  "host_permissions": ["https://lilypham7811.github.io/LearningEnglish/*", "http://localhost:8000/*"],
   "content_scripts": [
-    { "matches": ["http://localhost:8000/*"], "js": ["app-bridge.js"], "run_at": "document_idle" }
+    { "matches": ["https://lilypham7811.github.io/LearningEnglish/*", "http://localhost:8000/*"], "js": ["app-bridge.js"], "run_at": "document_idle" }
   ],
   "commands": {
     "_execute_action": {

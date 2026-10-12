@@ -536,7 +536,7 @@
           <li>Mở <code>chrome://extensions</code> (Edge: <code>edge://extensions</code>) và bật <b>Developer mode</b> (Chế độ nhà phát triển).</li>
           <li>Bấm <b>Load unpacked</b> và chọn thư mục <code>extension</code> trong thư mục app này.</li>
           <li>Mở video YouTube hoặc bài báo, bấm chuột phải vào trang (trên YouTube: bấm vào chỗ trống ngoài khung video) → <b>Save to LearningEnglish</b>. Hoặc bấm biểu tượng tiện ích, hoặc phím <b>Alt+Shift+S</b>.</li>
-          <li>App cần đang chạy (http://localhost:8000). Nếu app chưa mở, tiện ích sẽ tự mở và lưu.</li>
+          <li>Bài được lưu vào app online (lilypham7811.github.io/LearningEnglish). Nếu app chưa mở, tiện ích sẽ tự mở và lưu.</li>
         </ol>
       </details>
     </div></div>`;

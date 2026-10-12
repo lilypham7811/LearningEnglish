@@ -1,6 +1,7 @@
 // Right-click "Save to LearningEnglish": captures the page (YouTube video or news article)
-// and hands it to the app at http://localhost:8000 through app-bridge.js.
-const APP = "http://localhost:8000/";
+// and hands it to the app through app-bridge.js. Uses an open app tab (online or local), else opens the online app.
+const APP = "https://lilypham7811.github.io/LearningEnglish/";
+const APP_URLS = [APP + "*", "http://localhost:8000/*"];
 
 chrome.runtime.onInstalled.addListener(() => {
   chrome.contextMenus.create({ id: "save-page", title: "Save to LearningEnglish", contexts: ["page", "selection", "video", "image", "frame"] });
@@ -12,7 +13,7 @@ chrome.contextMenus.onClicked.addListener((info, tab) =>
 chrome.action.onClicked.addListener((tab) => save(tab, null, null));
 
 async function save(tab, linkUrl, selection) {
-  if (tab?.url?.startsWith(APP)) return;
+  if (tab?.url?.startsWith(APP) || tab?.url?.startsWith("http://localhost:8000/")) return;
   let item = linkUrl ? { url: linkUrl } : await capture(tab);
   // A long selection is the article text the user wants (useful on messy pages).
   if (!linkUrl && selection && selection.length > 300) item = { ...item, text: selection };
@@ -61,7 +62,7 @@ function grabPage() {
 
 // Bring the app forward and ask its bridge to pick up the queue (a newly opened app picks it up on load).
 async function deliver() {
-  const [tab] = await chrome.tabs.query({ url: APP + "*" });
+  const [tab] = await chrome.tabs.query({ url: APP_URLS });
   if (!tab) { await chrome.tabs.create({ url: APP }); return; }
   await chrome.tabs.update(tab.id, { active: true });
   await chrome.windows.update(tab.windowId, { focused: true });
