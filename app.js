@@ -27,9 +27,9 @@
   function loadVoices() {
     const all = synth.getVoices().filter((v) => /^en[-_]/i.test(v.lang));
     if (!all.length) return;
-    // Prefer natural/online voices, then US/GB.
+    // Prefer natural/online voices (Edge, Safari), then Google voices (Chrome), then robotic desktop voices; US/GB first.
     const rank = (v) =>
-      (/natural|online|neural|enhanced|premium/i.test(v.name) ? 0 : 2) + (/en[-_](US|GB)/i.test(v.lang) ? 0 : 1);
+      (/natural|online|neural|enhanced|premium/i.test(v.name) ? 0 : /google/i.test(v.name) ? 2 : 4) + (/en[-_](US|GB)/i.test(v.lang) ? 0 : 1);
     state.voices = all.sort((a, b) => rank(a) - rank(b));
 
     const saved = safeGet("voices") || {};
@@ -100,6 +100,7 @@
   }
 
   async function playAll() {
+    track("listen");
     const token = ++state.playToken;
     for (let i = 0; i < state.dialog.lines.length; i++) {
       if (!(await playLine(i, state.rate, token))) return;
@@ -119,12 +120,13 @@
 
   // One-shot speech recognition for a single sentence.
   // Resolves { text, error, action }; state.listening.end(action) stops it early.
-  function listenOnce(maxMs, onInterim) {
+  function listenOnce(maxMs, target, onInterim) {
     return new Promise((resolve) => {
       const r = new Recognition();
       r.lang = "en-US";
       r.interimResults = true;
       r.continuous = false;
+      r.maxAlternatives = 5;
       let text = "", error = null, done = false;
       const finish = (action = null) => {
         if (done) return;
@@ -133,7 +135,7 @@
         state.listening = null;
         resolve({ text: text.trim(), error, action });
       };
-      r.onresult = (e) => { text = [...e.results].map((x) => x[0].transcript).join(" "); onInterim?.(text); };
+      r.onresult = (e) => { text = bestTranscript(e.results, target); onInterim?.(text); };
       r.onerror = (e) => { error = e.error; };
       r.onend = () => finish();
       const timer = setTimeout(() => { try { r.stop(); } catch { finish(); } }, maxMs);
@@ -145,6 +147,18 @@
       };
       try { r.start(); } catch { error = "start-failed"; finish(); }
     });
+  }
+
+  // The recognizer "corrects" speech toward common phrases. It returns up to 5 guesses per segment;
+  // keep the guess closest to the target sentence, so a correct sentence isn't marked wrong.
+  function bestTranscript(results, target) {
+    const want = new Set(tokenize(target).map(norm));
+    const overlap = (s) => tokenize(s).map(norm).filter((w) => want.has(w)).length;
+    return [...results].map((res) => {
+      let best = res[0].transcript;
+      for (let k = 1; k < res.length; k++) if (overlap(res[k].transcript) > overlap(best)) best = res[k].transcript;
+      return best;
+    }).join(" ").replace(/\s+/g, " ").trim();
   }
 
   // ---------- Dialog sources (no API) ----------
@@ -321,6 +335,78 @@
     return { title, topic, speakers: best.speakers, lines: best.lines, level, source: `AI trên máy (${model.label})` };
   }
 
+  // ---------- Google AI Mode (free, no key): open google.com in AI Mode with the question filled in ----------
+  // Must be called directly from a click (no await before it), or the browser blocks the new tab.
+  const AI_MODE_MAX = 1800; // keep the URL short enough; the full prompt is also copied to the clipboard
+  function openAiMode(prompt) {
+    const q = prompt.length > AI_MODE_MAX ? prompt.slice(0, AI_MODE_MAX) + "…" : prompt;
+    navigator.clipboard?.writeText(prompt).catch(() => {});
+    window.open(`https://www.google.com/search?udm=50&q=${encodeURIComponent(q)}`, "_blank", "noopener");
+    return prompt.length > AI_MODE_MAX;
+  }
+
+  // ---------- Google AI (Gemini, free tier with the learner's own key) ----------
+  const geminiKey = () => (safeGet("geminiKey") || "").trim();
+  const GEMINI_TEXT_MODEL = "gemini-3.8-flash";
+
+  const writeDialog = (topic) => (geminiKey() ? geminiDialog(topic) : aiDialog(topic));
+
+  async function geminiDialog(topic) {
+    const status = $("aiStatus");
+    status.hidden = false;
+    const level = $("level").value;
+    topic = cleanTopic(topic);
+    status.textContent = `Google AI đang viết bài ${LEVEL_VI[level].toLowerCase()} về "${topic}"…`;
+    const L = LEVELS[level];
+    const prompt =
+      `Write a realistic everyday English conversation for a ${level} (CEFR ${L.cefr}) learner from Vietnam about: "${topic}". ` +
+      `(The topic may be written in Vietnamese; the conversation must be in English.) ${L.style} ` +
+      `10 to 14 lines, two speakers (names or roles) taking turns, each line at most ${L.maxWords} words. ` +
+      `Every line must be natural and something a real person would say. Open naturally, stay on topic, end naturally, ` +
+      `and include useful phrases the learner can reuse. Give a natural Vietnamese translation for every line, ` +
+      `a short English title, a Vietnamese title, and one fitting emoji.`;
+    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_TEXT_MODEL}:generateContent`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-goog-api-key": geminiKey() },
+      body: JSON.stringify({
+        contents: [{ role: "user", parts: [{ text: prompt }] }],
+        generationConfig: {
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: "OBJECT",
+            properties: {
+              title: { type: "STRING" }, titleVi: { type: "STRING" }, emoji: { type: "STRING" },
+              speakers: { type: "ARRAY", items: { type: "STRING" } },
+              lines: { type: "ARRAY", items: { type: "OBJECT", properties: {
+                speaker: { type: "INTEGER", description: "0 or 1, index into speakers" },
+                en: { type: "STRING" }, vi: { type: "STRING" },
+              }, required: ["speaker", "en", "vi"] } },
+            },
+            required: ["title", "titleVi", "emoji", "speakers", "lines"],
+          },
+        },
+      }),
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(geminiError(res.status, json));
+    const out = JSON.parse(json.candidates?.[0]?.content?.parts?.map((p) => p.text || "").join("") || "{}");
+    const lines = (out.lines || []).filter((l) => l.en).map((l) => [l.speaker === 1 ? 1 : 0, l.en.trim(), (l.vi || "").trim()]);
+    if (lines.length < 4) throw new Error("câu trả lời không đúng dạng. Hãy thử lại.");
+    status.textContent = "✓ Google AI đã viết xong. Bài đã tự lưu vào “⭐ Của tôi”.";
+    return {
+      title: out.title || topic, titleVi: out.titleVi || "", emoji: out.emoji || "💬", topic,
+      speakers: (out.speakers || []).slice(0, 2).concat(["A", "B"]).slice(0, 2),
+      lines, level, source: "Google AI",
+    };
+  }
+  function geminiError(status, json) {
+    const msg = json?.error?.message || "";
+    if (status === 400 && /api key/i.test(msg)) return "khoá Google AI không đúng. Hãy kiểm tra lại trong Cài đặt.";
+    if (status === 403) return "khoá Google AI không có quyền dùng. Hãy tạo khoá mới ở aistudio.google.com/apikey.";
+    if (status === 429) return "đã dùng hết lượt miễn phí trong lúc này. Hãy đợi một lát rồi thử lại.";
+    return `lỗi ${status}${msg ? ": " + msg : ""}`;
+  }
+
   function parseAiDialog(text) {
     const speakers = [];
     const lines = [];
@@ -348,6 +434,48 @@
     return { speakers, lines };
   }
 
+  // ---------- Pasted dialogs (written in Claude / ChatGPT, free) ----------
+  function pastePrompt() {
+    const topic = cleanTopic($("topicInput").value) || "a common everyday situation";
+    const level = $("level").value;
+    const L = LEVELS[level];
+    return `You are an experienced English teacher. Write a realistic everyday English conversation for a ${level} (CEFR ${L.cefr}) learner from Vietnam about: "${topic}".
+${L.style}
+Rules:
+- 10 to 14 lines, two speakers with names or roles, taking turns.
+- Each line has at most ${L.maxWords} words, sounds natural, and is something a real person would say.
+- Include useful phrases the learner can reuse in daily life.
+- After each English line, add " | " and a natural Vietnamese translation.
+Output ONLY this format, with no other text:
+# English title | Vietnamese title
+Name1: English sentence | Vietnamese translation
+Name2: English sentence | Vietnamese translation`;
+  }
+
+  function parsePasted(text) {
+    let title = "", titleVi = "";
+    const speakers = [], lines = [];
+    for (let raw of text.split("\n")) {
+      raw = raw.replace(/\*\*|__|`/g, "").trim();
+      if (!raw || /^```/.test(raw)) continue;
+      const h = raw.match(/^#+\s*(.+)$/);
+      if (h) { [title, titleVi = ""] = h[1].split("|").map((s) => s.trim()); continue; }
+      const m = raw.match(/^([^:|]{1,25}):\s*(.+)$/);
+      if (!m) continue;
+      const name = m[1].trim();
+      let idx = speakers.indexOf(name);
+      if (idx === -1) {
+        if (speakers.length === 2) continue;
+        idx = speakers.push(name) - 1;
+      }
+      const [en, vi] = m[2].split(/\s+\|\s+|\s+\/\/\s+/).map((s) => s.replace(/^["“]|["”]$/g, "").trim());
+      if (en) lines.push(vi ? [idx, en, vi] : [idx, en]);
+    }
+    if (lines.length < 2 || speakers.length < 2) return null;
+    const topic = cleanTopic($("topicInput").value);
+    return { title: title || topic || "My Conversation", titleVi, topic, speakers, lines, level: $("level").value, source: "Dán từ AI" };
+  }
+
   // ---------- Saved dialogs (kept in this browser's localStorage) ----------
   const getSaved = () => safeGet("saved") || [];
   const isSaved = (id) => getSaved().some((d) => d.id === id);
@@ -370,53 +498,80 @@
     $("saveBtn").textContent = on ? "★ Đã lưu" : "☆ Lưu";
     $("saveBtn").classList.toggle("saved", on);
   }
-  function renderSaved() {
-    const saved = getSaved();
-    $("savedSection").hidden = !saved.length; // import is also in settings, for a new device
-    $("savedEmpty").hidden = saved.length > 0;
-    $("exportBtn").disabled = !saved.length;
-    $("savedList").innerHTML = saved.map((d) => `
-      <li data-id="${esc(d.id)}">
-        <button class="open" title="Mở">${esc(d.titleVi || d.title)} <small>${new Date(d.savedAt).toLocaleDateString("vi-VN")}</small></button>
-        <button class="del ghost icon" aria-label="Xóa">✕</button>
-      </li>`).join("");
+  // AI-written and pasted dialogs are kept automatically, so they show up in the topic row.
+  function autoSave(d) {
+    if (isSaved(d.id)) return;
+    const { id, title, titleVi, speakers, lines, level, source, topic } = d;
+    safeSet("saved", [{ id, title, titleVi, speakers, lines, level, source, topic, savedAt: Date.now() }, ...getSaved()]);
   }
-  function onSavedClick(e) {
-    const li = e.target.closest("li");
-    if (!li) return;
-    const d = getSaved().find((x) => x.id === li.dataset.id);
-    if (!d) return;
-    if (e.target.closest(".del")) {
-      if (!confirm(`Xóa "${d.titleVi || d.title}" khỏi danh sách đã lưu?`)) return;
-      safeSet("saved", getSaved().filter((x) => x.id !== d.id));
-      renderSaved();
-      if (state.dialog?.id === d.id) updateSaveBtn();
-    } else if (e.target.closest(".open")) {
-      render(copyDialog(d, d.source));
-    }
+  function renderSaved() {
+    const n = getSaved().length;
+    $("savedCount").textContent = n;
+    renderTopics();
   }
 
-  // Export/import as a .json file, to back up or move to another device.
+  // ---------- Topic row (library + my dialogs), one horizontal line of pills ----------
+  const PILL_COLORS = ["--r1", "--r2", "--r3", "--r4", "--r5", "--r6", "--r7"];
+  const pillColor = (i) => `var(${PILL_COLORS[i % PILL_COLORS.length]})`;
+  const pillInk = (i) => (PILL_COLORS[i % PILL_COLORS.length] === "--r3" ? "var(--r-on-yellow)" : "#fff");
+  const LEVEL_SHORT = { Beginner: "A2", Intermediate: "B1", Advanced: "C1" };
+  let topicFilter = "all";
+
+  function topicList() {
+    const mine = getSaved().map((d) => ({ ...d, mine: true }));
+    const lib = window.DIALOGS.filter((d) => !mine.some((m) => m.id === d.id));
+    if (topicFilter === "saved") return mine;
+    const all = [...mine, ...lib];
+    return topicFilter === "all" ? all : all.filter((d) => d.level === topicFilter);
+  }
+  function renderTopics() {
+    const list = topicList();
+    $("chips").innerHTML = list.map((d, i) =>
+      `<button role="tab" data-id="${esc(d.id)}" data-i="${i}" aria-selected="${state.dialog?.id === d.id}" style="--gc:${pillColor(i)};--gfg:${pillInk(i)}" title="${esc(d.title)}">` +
+      `${d.mine ? "★ " : ""}${d.emoji || "💬"} ${esc(d.titleVi || d.title)}<span class="cnt">${LEVEL_SHORT[d.level] || "AI"}</span></button>`).join("");
+    $("savedEmpty").hidden = !(topicFilter === "saved" && !list.length);
+  }
+  function onTopicClick(e) {
+    const b = e.target.closest("button[data-id]");
+    if (!b) return;
+    const mine = getSaved().find((x) => x.id === b.dataset.id);
+    const d = mine ? copyDialog(mine, mine.source) : copyDialog(window.DIALOGS.find((x) => x.id === b.dataset.id), "Thư viện có sẵn");
+    d.color = pillColor(+b.dataset.i);
+    render(d);
+  }
+
+  // Backup of everything (my dialogs, videos, articles, speeches, practice log, settings except the Google key)
+  // as one .json file, to move between computer and phone.
+  const BACKUP_LISTS = ["saved", "videos", "articles", "speeches", "log"];
+  const BACKUP_PREFS = ["level", "aiModel", "alwaysAi", "showVi", "voices", "geminiVoice"];
   function exportSaved() {
-    const blob = new Blob([JSON.stringify(getSaved(), null, 2)], { type: "application/json" });
+    const data = {};
+    for (const k of [...BACKUP_LISTS, ...BACKUP_PREFS]) { const v = safeGet(k); if (v != null) data[k] = v; }
+    const blob = new Blob([JSON.stringify({ app: "shadow-english", version: 2, exportedAt: new Date().toISOString(), data })], { type: "application/json" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
-    a.download = `shadow-english-${new Date().toISOString().slice(0, 10)}.json`;
+    a.download = `shadow-english-sao-luu-${new Date().toISOString().slice(0, 10)}.json`;
     a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 1000);
   }
   async function importSaved(file) {
     try {
-      const data = JSON.parse(await file.text());
-      if (!Array.isArray(data)) throw 0;
-      const valid = data.filter((d) => d && d.id && d.title && Array.isArray(d.speakers) && Array.isArray(d.lines));
-      const saved = getSaved();
-      const have = new Set(saved.map((d) => d.id));
-      const added = valid.filter((d) => !have.has(d.id)).map((d) => ({ ...d, savedAt: d.savedAt || Date.now() }));
-      safeSet("saved", [...added, ...saved]);
-      renderSaved();
-      updateSaveBtn();
-      alert(`Đã nhập ${added.length} bài.`);
+      const json = JSON.parse(await file.text());
+      // Version 1 backups were just the array of saved dialogs.
+      const data = Array.isArray(json) ? { saved: json } : json?.app === "shadow-english" ? json.data : null;
+      if (!data) throw 0;
+      let added = 0;
+      for (const k of BACKUP_LISTS) {
+        if (!Array.isArray(data[k])) continue;
+        const cur = safeGet(k) || [];
+        const have = new Set(cur.map((x) => x.id));
+        const extra = data[k].filter((x) => x && x.id && !have.has(x.id));
+        added += extra.length;
+        safeSet(k, k === "log" ? [...cur, ...extra].sort((a, b) => a.start - b.start) : [...extra, ...cur]);
+      }
+      for (const k of BACKUP_PREFS) if (data[k] != null && safeGet(k) == null) safeSet(k, data[k]);
+      alert(`Đã nhập ${added} mục. App sẽ tải lại.`);
+      location.reload();
     } catch {
       alert("File này không phải file sao lưu của Shadow English.");
     }
@@ -428,10 +583,13 @@
     $("topicInput").value = d.topic || d.title;
     $("regenBtn").disabled = true;
     try {
-      render(await aiDialog(d.topic || d.title));
+      const nd = await writeDialog(d.topic || d.title);
+      autoSave(nd);
+      renderSaved();
+      render(nd);
     } catch (err) {
       $("aiStatus").hidden = false;
-      $("aiStatus").textContent = "AI trên máy không chạy được: " + err.message;
+      $("aiStatus").textContent = "AI không viết được bài: " + err.message;
     } finally {
       $("regenBtn").disabled = false;
     }
@@ -472,11 +630,16 @@
     closeRoleplay();
     if (!d.id) d.id = "u" + Date.now(); // AI/template dialogs get an id so they can be saved
     state.dialog = d;
+    showView("talk");
+    startSession(d, "talk");
     state.editing = false;
     document.body.classList.remove("editing");
     $("editBtn").textContent = "✏️ Sửa";
-    $("regenBtn").hidden = !navigator.gpu;
+    $("regenBtn").hidden = !geminiKey() && !navigator.gpu;
+    $("emptyDialog").hidden = true;
     $("dialogSection").hidden = false;
+    $("dialogSection").style.setProperty("--gc", d.color || "var(--leaf)");
+    renderTopics();
     $("dialogTitle").textContent = d.title;
     $("dialogTitleVi").textContent = d.titleVi || "";
     $("dialogMeta").textContent = `${LEVEL_VI[d.level] || d.level} · ${d.speakers.join(" & ")} · ${d.source}`;
@@ -498,11 +661,13 @@
           <div class="text">${wrapWords(text)}</div>
           ${vi ? `<div class="vi">${esc(vi)}</div>` : ""}
         </div>`;
-      li.querySelector(".play").onclick = () => playLine(i);
+      li.querySelector(".play").onclick = () => { track("listen"); playLine(i); };
       li.querySelector(".bubble").onclick = () => { if (!state.editing) openShadow(i); };
       ol.appendChild(li);
     });
     $("dialogSection").scrollIntoView({ behavior: "smooth", block: "start" });
+    const pill = $("chips").querySelector('[aria-selected="true"]'); // centre it in the row without scrolling the page
+    if (pill) $("chips").scrollTo({ left: pill.offsetLeft - $("chips").clientWidth / 2 + pill.offsetWidth / 2, behavior: "smooth" });
   }
   // Wrap each word in a span carrying its char offsets, for boundary highlighting.
   function wrapWords(text) {
@@ -521,6 +686,7 @@
   function openShadow(i) {
     stopAll();
     stopRecording(true);
+    if (state.selected < 0) track("shadow");
     state.selected = i;
     document.querySelectorAll(".line.selected").forEach((el) => el.classList.remove("selected"));
     const li = $("dialog").children[i];
@@ -602,6 +768,7 @@
       for (let k = chunks.length - 1; k >= 0; k--) steps.push(chunks.slice(k).join(" "));
     }
     if (steps.length < 2) { note("Câu này đã ngắn rồi. Hãy dùng 🔁 Nhại ×3."); return; }
+    track("chunk");
     steps.push(text); // the whole line at the end
     const ol = $("chunks");
     ol.innerHTML = steps.map((s) => `<li>${esc(s)}</li>`).join("");
@@ -654,8 +821,9 @@
     r.lang = "en-US";
     r.interimResults = true;
     r.continuous = true;
+    r.maxAlternatives = 5;
     r.onresult = (e) => {
-      rec.transcript = [...e.results].map((x) => x[0].transcript).join(" ");
+      rec.transcript = bestTranscript(e.results, state.dialog.lines[state.selected][1]);
       note("Đang nghe: " + rec.transcript);
     };
     r.onerror = (e) => {
@@ -703,6 +871,7 @@
       return;
     }
     const { html, score, missed } = compareWords(target, transcript);
+    track("record", transcript ? score : undefined);
     $("scoreNum").textContent = score;
     $("diff").innerHTML = html;
     $("heard").textContent = transcript || "(không nghe thấy gì, hãy nói to hơn một chút)";
@@ -818,6 +987,7 @@
   async function rpRun() {
     const rp = state.rp, d = state.dialog;
     const token = ++rp.token;
+    track("roleplay");
     rp.scores = [];
     $("rpChat").innerHTML = "";
     $("rpRound").textContent = `· Bạn là ${d.speakers[rp.role]} · ${HINT_NAMES[rp.hint]}`;
@@ -859,7 +1029,7 @@
       }
       rpStatus(tried ? "🎙️ Nói lại nào!" : "🎙️ Đến lượt bạn, hãy nói!");
       $("rpMic").classList.add("on");
-      const res = await listenOnce(15000, (t) => rpStatus("🎙️ " + t));
+      const res = await listenOnce(15000, text, (t) => rpStatus("🎙️ " + t));
       $("rpMic").classList.remove("on");
       if (token !== rp.token) return;
       if (res.action) {
@@ -900,6 +1070,7 @@
     const rp = state.rp;
     const avg = rp.scores.length ? Math.round(rp.scores.reduce((a, b) => a + b, 0) / rp.scores.length) : 0;
     $("rpScore").textContent = Recognition ? avg : "✓";
+    if (Recognition && rp.scores.length) trackScore(avg);
     const last = rp.hint >= 2;
     $("rpEndMsg").textContent = !Recognition
       ? "Hoàn thành vòng này!"
@@ -953,10 +1124,202 @@
 
   function updateAiNote() {
     const m = currentModel();
-    $("aiNote").textContent = navigator.gpu
-      ? `✨ Chủ đề nào cũng được: chủ đề có sẵn mở ngay; chủ đề mới do AI miễn phí chạy ngay trên máy bạn viết (không cần API). Lần đầu tải mô hình một lần (${m.size})${IS_PHONE ? ", nên dùng Wi-Fi" : ""}.`
-      : "✨ Chủ đề có sẵn mở ngay. Trình duyệt này chưa chạy được AI trên máy, nên hãy chọn một chủ đề bên dưới.";
+    if (geminiKey()) {
+      $("aiNote").textContent = "✨ Chủ đề có sẵn mở ngay. Chủ đề mới do Google AI viết trong vài giây, kèm nghĩa tiếng Việt, và tự lưu vào “⭐ Của tôi”.";
+      return;
+    }
+    $("aiNote").innerHTML = `Mẹo: chủ đề mới → bấm <button type="button" class="linkish" data-open-paste>📋 Dán hội thoại</button> → <b>Hỏi Google AI Mode</b> (miễn phí, không cần đăng ký). ` +
+      `Hoặc dán khoá Google AI trong <button type="button" class="linkish" data-open-settings>Cài đặt</button> để AI viết bài ngay trong app. `;
+    $("aiNote").querySelector("[data-open-settings]").onclick = openSettings;
+    $("aiNote").querySelector("[data-open-paste]").onclick = () => $("pasteBtn").click();
+    $("aiNote").append(navigator.gpu
+      ? `Chưa có khoá thì AI chạy trên máy sẽ viết bài (chậm hơn, lần đầu tải ${m.size}${IS_PHONE ? ", nên dùng Wi-Fi" : ""}).`
+      : "Chưa có khoá thì hãy chọn một chủ đề có sẵn bên dưới.");
   }
+
+  // ---------- Views & settings ----------
+  function showView(v) {
+    if ($("view-" + v).hidden) {
+      window.scrollTo({ top: 0 });
+      endSession(); // time on another section is not practice on the last item
+    }
+    document.querySelectorAll("main > .view").forEach((el) => { el.hidden = el.id !== "view-" + v; });
+    document.querySelectorAll(".nav button[data-view]").forEach((b) => b.removeAttribute("aria-current"));
+    document.querySelector(`.nav button[data-view="${v}"]`)?.setAttribute("aria-current", "page");
+    if (v !== "talk") { stopAll(); closeShadow(); }
+    if (v === "progress") renderProgress();
+    document.dispatchEvent(new CustomEvent("se:view", { detail: v }));
+  }
+  function openSettings() {
+    $("geminiKey").value = geminiKey();
+    $("settings").showModal();
+  }
+  function updateAiState() {
+    const on = !!geminiKey();
+    $("aiState").dataset.mode = on ? "cloud" : "local";
+    $("aiState").querySelector("span").textContent = on ? "Google AI: đã có khoá" : "Google AI: chưa có khoá";
+    if (state.dialog) $("regenBtn").hidden = !on && !navigator.gpu;
+    updateAiNote();
+  }
+
+  // ---------- Practice tracking (Section 2) ----------
+  // One session per opened dialog. Time only counts while the learner is actually practising:
+  // page visible, a dialog open, and some activity in the last 90 s (or audio / role-play / Google AI running).
+  const LOG_MAX = 3000;
+  let session = null, lastActive = 0, progressRange = 7;
+  const getLog = () => safeGet("log") || [];
+
+  // kind: talk | video | article | speech (which section the practice happened in)
+  function startSession(d, kind = "talk") {
+    saveSession();
+    session = { id: "s" + Date.now(), start: Date.now(), end: Date.now(), dialogId: d.id, title: d.title, titleVi: d.titleVi || "",
+      kind, seconds: 0, acts: {}, best: null };
+    lastActive = Date.now();
+  }
+  function endSession() {
+    saveSession();
+    session = null;
+  }
+  function track(kind, score) {
+    if (!session) return;
+    lastActive = Date.now();
+    session.acts[kind] = (session.acts[kind] || 0) + 1;
+    if (typeof score === "number") session.best = Math.max(session.best ?? 0, score);
+    saveSession();
+  }
+  function trackScore(score) {
+    if (!session || typeof score !== "number") return;
+    session.best = Math.max(session.best ?? 0, score);
+    saveSession();
+  }
+  function saveSession() {
+    if (!session || (session.seconds < 10 && !Object.keys(session.acts).length)) return;
+    session.end = Date.now();
+    const log = getLog().filter((x) => x.id !== session.id);
+    log.push({ ...session });
+    safeSet("log", log.slice(-LOG_MAX));
+    updateNavProgress();
+  }
+  function initTracking() {
+    const mark = () => { lastActive = Date.now(); };
+    ["pointerdown", "keydown"].forEach((ev) => document.addEventListener(ev, mark, true));
+    let tick = 0;
+    setInterval(() => {
+      if (!session || document.visibilityState !== "visible") return;
+      const busy = synth?.speaking || state.recording || state.rp || window.SE_LIVE?.active || window.SE_BUSY;
+      if (!busy && Date.now() - lastActive > 90000) return;
+      // A long break starts a new session for the same dialog.
+      if (Date.now() - session.end > 30 * 60000 && session.seconds > 0)
+        startSession({ id: session.dialogId, title: session.title, titleVi: session.titleVi }, session.kind);
+      session.seconds++;
+      session.end = Date.now();
+      if (++tick % 15 === 0) saveSession();
+    }, 1000);
+    document.addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden") saveSession(); });
+    window.addEventListener("pagehide", saveSession);
+    updateNavProgress();
+  }
+
+  const dayKey = (t) => { const d = new Date(t); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
+  const fmtDur = (s) => s < 60 ? `${s} giây` : s < 3600 ? `${Math.round(s / 60)} phút` : `${Math.floor(s / 3600)} giờ ${Math.round((s % 3600) / 60)} phút`;
+  const ACT_NAMES = { listen: "Nghe", shadow: "Nhại câu", record: "Ghi âm", chunk: "Từng cụm", roleplay: "Nhập vai", ai: "Nói với Google AI",
+    open: "Mở link", read: "Đọc", chat: "Hỏi Google AI", phrase: "Luyện cụm từ", prompter: "Đọc chạy chữ", speech: "Ghi âm bài nói", feedback: "AI nhận xét" };
+  const KIND_NAMES = { talk: "Hội thoại", video: "Video", article: "Bài báo", speech: "Phát biểu" };
+
+  function updateNavProgress() {
+    const today = dayKey(Date.now());
+    const s = getLog().filter((x) => dayKey(x.start) === today).reduce((a, x) => a + x.seconds, 0);
+    $("navProgress").textContent = s ? `Hôm nay: ${fmtDur(s)}` : "Hôm nay chưa luyện";
+  }
+  function streakDays(days) {
+    let n = 0;
+    const d = new Date();
+    if (!days.has(dayKey(d))) d.setDate(d.getDate() - 1); // today not done yet: count up to yesterday
+    while (days.has(dayKey(d))) { n++; d.setDate(d.getDate() - 1); }
+    return n;
+  }
+
+  function renderProgress() {
+    saveSession();
+    const all = getLog();
+    const since = progressRange ? Date.now() - progressRange * 86400000 : 0;
+    const log = all.filter((x) => x.start >= since);
+    const secs = log.reduce((a, x) => a + x.seconds, 0);
+    const days = new Set(log.map((x) => dayKey(x.start)));
+    const allDays = new Set(all.map((x) => dayKey(x.start)));
+    const scores = log.map((x) => x.best).filter((x) => x != null);
+    const rangeTxt = progressRange ? `${progressRange} ngày qua` : "từ trước đến nay";
+    const kpi = (label, val, unit, color, foot) =>
+      `<div class="kpi" style="--pc:${color}"><div class="k-label">${label}</div><div class="k-val">${val}<small> ${unit}</small></div><div class="k-foot">${foot}</div></div>`;
+    $("kpis").innerHTML =
+      kpi("Tổng thời gian", secs >= 3600 ? (secs / 3600).toFixed(1) : Math.round(secs / 60), secs >= 3600 ? "giờ" : "phút", "var(--r4)", rangeTxt) +
+      kpi("Số lần luyện", log.length, "lần", "var(--r5)", `${rangeTxt}`) +
+      kpi("Số ngày đã luyện", days.size, "ngày", "var(--r2)", progressRange ? `trên ${progressRange} ngày` : "tổng cộng") +
+      kpi("Chuỗi ngày liên tiếp", streakDays(allDays), "ngày", "var(--r1)", "luyện mỗi ngày để giữ chuỗi") +
+      kpi("Điểm phát âm TB", scores.length ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) : "–", scores.length ? "%" : "", "var(--r7)", "điểm cao nhất mỗi lần");
+
+    // Heatmap: 12 weeks (columns) × 7 days (rows, Monday first), shaded by minutes practised.
+    const perDay = {};
+    all.forEach((x) => { const k = dayKey(x.start); perDay[k] = (perDay[k] || 0) + x.seconds; });
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const monday = new Date(today); monday.setDate(today.getDate() - ((today.getDay() + 6) % 7) - 7 * 11);
+    const DAYS = ["T2", "T3", "T4", "T5", "T6", "T7", "CN"];
+    let html = `<span></span>`;
+    for (let w = 0; w < 12; w++) {
+      const d = new Date(monday); d.setDate(monday.getDate() + w * 7);
+      html += `<span class="ml">${d.getDate() <= 7 || w === 0 ? "Th" + (d.getMonth() + 1) : ""}</span>`;
+    }
+    for (let r = 0; r < 7; r++) {
+      html += `<span class="dl">${r % 2 === 0 ? DAYS[r] : ""}</span>`;
+      for (let w = 0; w < 12; w++) {
+        const d = new Date(monday); d.setDate(monday.getDate() + w * 7 + r);
+        const k = dayKey(d), s = perDay[k] || 0;
+        const lvl = !s ? 0 : s < 300 ? 1 : s < 900 ? 2 : s < 1800 ? 3 : 4;
+        const cls = d > today ? "c future" : k === dayKey(today) ? "c today" : "c";
+        html += `<span class="${cls}" data-l="${lvl}" title="${d.toLocaleDateString("vi-VN")}: ${s ? fmtDur(s) : "chưa luyện"}"></span>`;
+      }
+    }
+    html += `<div class="heat-legend">Ít <span class="c" data-l="0"></span><span class="c" data-l="1"></span><span class="c" data-l="2"></span><span class="c" data-l="3"></span><span class="c" data-l="4"></span> Nhiều</div>`;
+    $("heat").innerHTML = html;
+
+    // Top topics by time.
+    const byTopic = {};
+    log.forEach((x) => { const t = byTopic[x.dialogId] ||= { name: x.titleVi || x.title, s: 0, n: 0 }; t.s += x.seconds; t.n++; });
+    const top = Object.values(byTopic).sort((a, b) => b.s - a.s).slice(0, 7);
+    const max = top[0]?.s || 1;
+    $("topTopics").innerHTML = top.length
+      ? top.map((t, i) => `<div class="lg" style="--pc:${pillColor(i)}"><span class="lg-name">${esc(t.name)}</span><span class="lg-bar"><i style="width:${Math.max(4, (t.s / max) * 100)}%"></i></span><span class="lg-n">${fmtDur(t.s)}</span></div>`).join("")
+      : `<p class="hint">Chưa có dữ liệu. Mở một chủ đề và bắt đầu luyện nhé!</p>`;
+
+    // Log table, newest first.
+    const rows = [...log].reverse().slice(0, 200);
+    $("logTable").innerHTML = rows.length
+      ? `<thead><tr><th>Ngày</th><th>Giờ</th><th>Chủ đề</th><th>Đã luyện</th><th class="num">Thời gian</th><th class="num">Điểm</th></tr></thead><tbody>` +
+        rows.map((x) => {
+          const d = new Date(x.start);
+          const acts = Object.entries(x.acts).map(([k, n]) => `<span class="chip${k === "ai" ? " ai" : ""}">${ACT_NAMES[k] || k}${n > 1 ? " ×" + n : ""}</span>`).join("");
+          return `<tr><td>${d.toLocaleDateString("vi-VN", { weekday: "short", day: "2-digit", month: "2-digit", year: "numeric" })}</td>
+            <td class="muted">${d.toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" })}</td>
+            <td><span class="chip kind-${x.kind || "talk"}">${KIND_NAMES[x.kind || "talk"]}</span> <b>${esc(x.titleVi || x.title)}</b>${x.titleVi ? `<span class="muted small"> · ${esc(x.title)}</span>` : ""}</td>
+            <td>${acts || '<span class="muted">Đọc bài</span>'}</td>
+            <td class="num">${fmtDur(x.seconds)}</td>
+            <td class="num">${x.best != null ? x.best + "%" : "–"}</td></tr>`;
+        }).join("") + "</tbody>"
+      : `<tbody><tr><td class="muted">Chưa có buổi luyện nào ${progressRange ? "trong " + progressRange + " ngày qua" : ""}.</td></tr></tbody>`;
+  }
+
+  // Shared with live.js (Google AI live practice).
+  window.SE = {
+    get dialog() { return state.dialog; },
+    geminiKey, openAiMode, track, trackScore, startSession, endSession, stopAll, closeShadow, openSettings, showView, safeGet, safeSet, esc, LEVELS,
+    levelName: (lv) => LEVEL_VI[lv] || lv,
+    // Speech helpers for sections 3-5.
+    say: (text, rate = state.rate) => { stopAll(); state.playToken++; return speak(text, state.voiceA, rate); },
+    listenOnce: (maxMs, target, onInterim) => listenOnce(maxMs, target, onInterim),
+    stopListening: () => state.listening?.end(),
+    compareWords, pronunciationTips, hasRecognition: !!Recognition,
+    geminiError,
+  };
 
   // ---------- Wire up ----------
   async function onSubmit(e) {
@@ -971,18 +1334,21 @@
     // 1. Common topic we already have a hand-written dialog for: instant.
     if (best && exact && !$("aiMode").checked) return render(best);
 
-    // 2. Anything else: write a new dialog with the free on-device AI.
-    if (navigator.gpu) {
+    // 2. Anything else: Google AI if there is a key, otherwise the free on-device AI.
+    if (geminiKey() || navigator.gpu) {
       btn.disabled = true;
       btn.textContent = "Đang viết…";
       try {
-        return render(await aiDialog(topic));
+        const d = await writeDialog(topic);
+        autoSave(d);
+        renderSaved();
+        return render(d);
       } catch (err) {
         $("aiStatus").hidden = false;
-        $("aiStatus").textContent = "AI trên máy không chạy được: " + err.message;
+        $("aiStatus").textContent = "AI không viết được bài: " + err.message;
       } finally {
         btn.disabled = false;
-        btn.textContent = "Tạo hội thoại";
+        btn.textContent = "✨ Tạo hội thoại";
       }
     } else {
       $("aiStatus").hidden = false;
@@ -1006,13 +1372,37 @@
       synth.onvoiceschanged = loadVoices;
     }
 
-    $("chips").innerHTML = window.DIALOGS.map((d) =>
-      `<button data-id="${d.id}">${d.emoji} <span>${esc(d.titleVi)}<small>${esc(d.title)}</small></span></button>`).join("");
-    $("chips").onclick = (e) => {
-      const b = e.target.closest("button");
-      const d = b && window.DIALOGS.find((x) => x.id === b.dataset.id);
-      if (d) render(copyDialog(d, "Thư viện có sẵn"));
+    $("chips").onclick = onTopicClick;
+    $("topicFilter").onclick = (e) => {
+      const b = e.target.closest("button[data-f]");
+      if (!b) return;
+      topicFilter = b.dataset.f;
+      $("topicFilter").querySelectorAll("button").forEach((x) => x.setAttribute("aria-pressed", x === b));
+      renderTopics();
+      $("chips").scrollTo({ left: 0 });
     };
+    $("rowLeft").onclick = () => $("chips").scrollBy({ left: -$("chips").clientWidth * 0.8 });
+    $("rowRight").onclick = () => $("chips").scrollBy({ left: $("chips").clientWidth * 0.8 });
+    $("navTalk").textContent = `${window.DIALOGS.length} chủ đề có sẵn`;
+    document.querySelector(".nav").onclick = (e) => {
+      const b = e.target.closest("button[data-view]");
+      if (!b) return;
+      if (b.dataset.view === "settings") return openSettings();
+      showView(b.dataset.view);
+    };
+    $("rangeSeg").onclick = (e) => {
+      const b = e.target.closest("button[data-r]");
+      if (!b) return;
+      progressRange = +b.dataset.r;
+      $("rangeSeg").querySelectorAll("button").forEach((x) => x.setAttribute("aria-pressed", x === b));
+      renderProgress();
+    };
+    $("clearLog").onclick = () => {
+      if (!confirm("Xóa toàn bộ nhật ký luyện tập? Không thể khôi phục.")) return;
+      safeSet("log", []);
+      renderProgress();
+    };
+    initTracking();
 
     // Preferences
     $("aiModel").value = IS_PHONE ? "fast" : "better";
@@ -1035,8 +1425,7 @@
     $("saveBtn").onclick = toggleSave;
     $("regenBtn").onclick = regenerate;
     $("editBtn").onclick = toggleEdit;
-    $("savedList").onclick = onSavedClick;
-    $("exportBtn").onclick = exportSaved;
+    $("exportBtn").onclick = $("exportBtn2").onclick = exportSaved;
     $("importBtn").onclick = $("importBtn2").onclick = () => $("importFile").click();
     $("importFile").onchange = (e) => { if (e.target.files[0]) importSaved(e.target.files[0]); e.target.value = ""; };
     renderSaved();
@@ -1044,7 +1433,7 @@
     $("hideText").onchange = (e) => document.body.classList.toggle("hide-text", e.target.checked);
 
     // Shadow panel
-    $("listenBtn").onclick = () => playLine(state.selected);
+    $("listenBtn").onclick = () => { track("listen"); playLine(state.selected); };
     $("slowBtn").onclick = () => playLine(state.selected, Math.max(0.5, state.rate - 0.3));
     $("chunkBtn").onclick = chunkPractice;
     $("loopBtn").onclick = () => shadowLoop(3);
@@ -1072,7 +1461,40 @@
     $("rpAgain").onclick = () => rpRun();
     $("rpSwap").onclick = () => { state.rp.role = 1 - state.rp.role; state.rp.hint = 0; rpRun(); };
 
-    $("settingsBtn").onclick = () => $("settings").showModal();
+    $("geminiKey").value = geminiKey();
+    $("geminiKey").onchange = () => { safeSet("geminiKey", $("geminiKey").value.trim()); updateAiState(); };
+    $("geminiVoice").value = safeGet("geminiVoice") || "Kore";
+    $("geminiVoice").onchange = () => safeSet("geminiVoice", $("geminiVoice").value);
+    $("settings").addEventListener("close", () => { safeSet("geminiKey", $("geminiKey").value.trim()); updateAiState(); });
+    updateAiState();
+    $("pasteBtn").onclick = () => { $("pasteErr").textContent = ""; $("pasteDlg").showModal(); };
+    $("copyPrompt").onclick = async () => {
+      try {
+        await navigator.clipboard.writeText(pastePrompt());
+        $("copyPrompt").textContent = "✓ Đã chép!";
+      } catch {
+        $("pasteText").value = pastePrompt(); // clipboard blocked: show the prompt so it can be copied by hand
+        $("pasteErr").textContent = "Không tự chép được. Hãy chép lời nhắn trong ô trên, rồi xóa ô và dán câu trả lời vào.";
+      }
+      setTimeout(() => { $("copyPrompt").textContent = "📄 Chép lời nhắn"; }, 4000);
+    };
+    $("aiModePaste").onclick = () => {
+      openAiMode(pastePrompt());
+      $("pasteErr").textContent = "Đã mở Google AI Mode trong tab mới. Khi có câu trả lời, chép toàn bộ đoạn hội thoại và dán vào ô trên.";
+    };
+    $("pasteOpen").onclick = () => {
+      const d = parsePasted($("pasteText").value);
+      if (!d) {
+        $("pasteErr").textContent = "Chưa đọc được hội thoại. Mỗi dòng cần có dạng “Tên: câu tiếng Anh | nghĩa tiếng Việt”.";
+        return;
+      }
+      $("pasteDlg").close();
+      $("pasteText").value = "";
+      d.id = "u" + Date.now();
+      autoSave(d);
+      renderSaved();
+      render(d);
+    };
     $("voiceA").onchange = $("voiceB").onchange = saveVoices;
 
     document.addEventListener("keydown", (e) => {
@@ -1086,4 +1508,6 @@
   }
 
   init();
+  // Installed app: works offline after the first visit (needs https or localhost).
+  if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
 })();

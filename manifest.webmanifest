@@ -1,0 +1,17 @@
+{
+  "name": "Shadow English – Luyện nói tiếng Anh",
+  "short_name": "Shadow English",
+  "description": "Luyện nói tiếng Anh: hội thoại, video tin tức, bài báo, phát biểu, với Google AI.",
+  "lang": "vi",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#F2F4EF",
+  "theme_color": "#1F3B2D",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

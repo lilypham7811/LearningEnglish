@@ -18,6 +18,29 @@ python -m http.server 8000
 
 Then open http://localhost:8000 in **Chrome or Edge**.
 
+## Google AI (free, optional)
+
+Paste a free Gemini API key (from https://aistudio.google.com/apikey) in **Cài đặt**. It is stored only in this browser.
+
+- **🎙️ Luyện với Google AI**: live voice practice (`live.js`, Gemini Live API, model `gemini-3.8-live`). The AI plays the other role, follows the dialog, corrects mistakes, or chats freely about the topic.
+- **✨ Tạo hội thoại**: new topics are written by `gemini-3.8-flash`, with Vietnamese translations, and saved automatically under **⭐ Của tôi**.
+
+On the free tier Google may use the content to improve its products.
+
+## Sections 3–5 (`library.js`)
+
+- **Video tin tức**: saved YouTube news videos (embedded player, link to YouTube). Google AI watches the video once and writes the transcript; then the chat can pick the 3 best phrases, new words, a summary, or start a live voice chat about it.
+- **Bài báo**: saved news articles with a reading view (click a sentence to hear it). Google AI picks 3–5 sentences/phrases to practise (listen + say it and get a score), new words, a summary.
+- **Phát biểu**: paste a speech or have Google AI write one; teleprompter, model reading, record yourself and get AI feedback on the recording (score, pronunciation, pace, pauses, filler words), audience Q&A by voice. Practice counts and a daily streak.
+
+### Browser extension (`extension/`)
+
+Right-click a page → **Save to LearningEnglish** (or the toolbar button, or Alt+Shift+S). YouTube pages go to Videos; other pages go to Articles with their text. Install: `chrome://extensions` → Developer mode → Load unpacked → choose the `extension` folder. The app must be served at http://localhost:8000.
+
+## Practice tracking
+
+**Tiến độ luyện tập** logs each practice session (date, time, topic, activities, active time, best score) in localStorage and shows totals, a 12-week calendar, top topics and a log table.
+
 ## How it works without an API
 
 | Feature | Browser technology |
