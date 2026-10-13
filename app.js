@@ -1111,7 +1111,7 @@ Name2: English sentence | Vietnamese translation`;
   function safeGet(k) { try { return JSON.parse(localStorage.getItem("se_" + k)); } catch { return null; } }
   // Synced lists: every changed item gets updatedAt, every removed item a tombstone, so computer and phone
   // can merge their copies (newest version of each item wins, deletions spread). sync.js does the merging.
-  const SYNC_LISTS = ["saved", "videos", "articles", "speeches", "log"];
+  const SYNC_LISTS = ["saved", "videos", "articles", "speeches", "words", "log"];
   const SYNC_PREFS = ["level", "aiModel", "alwaysAi", "showVi", "voices", "geminiVoice", "geminiKey"];
   function safeSet(k, v) {
     try {
@@ -1243,8 +1243,8 @@ Name2: English sentence | Vietnamese translation`;
   const dayKey = (t) => { const d = new Date(t); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
   const fmtDur = (s) => s < 60 ? `${s} giây` : s < 3600 ? `${Math.round(s / 60)} phút` : `${Math.floor(s / 3600)} giờ ${Math.round((s % 3600) / 60)} phút`;
   const ACT_NAMES = { listen: "Nghe", shadow: "Nhại câu", record: "Ghi âm", chunk: "Từng cụm", roleplay: "Nhập vai", ai: "Nói với Google AI",
-    open: "Mở link", read: "Đọc", chat: "Hỏi Google AI", phrase: "Luyện cụm từ", prompter: "Đọc chạy chữ", speech: "Ghi âm bài nói", feedback: "AI nhận xét" };
-  const KIND_NAMES = { talk: "Hội thoại", video: "Video", article: "Bài báo", speech: "Phát biểu" };
+    open: "Mở link", read: "Đọc", chat: "Hỏi Google AI", phrase: "Luyện cụm từ", prompter: "Đọc chạy chữ", speech: "Ghi âm bài nói", feedback: "AI nhận xét", word: "Lưu từ", review: "Ôn từ" };
+  const KIND_NAMES = { talk: "Hội thoại", video: "Video", article: "Bài báo", speech: "Phát biểu", words: "Từ vựng" };
 
   function updateNavProgress() {
     const today = dayKey(Date.now());

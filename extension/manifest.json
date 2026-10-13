@@ -2,12 +2,12 @@
   "manifest_version": 3,
   "name": "Save to LearningEnglish",
   "short_name": "LearningEnglish",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Lưu video YouTube và bài báo vào app Shadow English (LearningEnglish) để học với Google AI.",
   "action": { "default_title": "Save to LearningEnglish (Alt+Shift+S)" },
   "background": { "service_worker": "background.js" },
   "permissions": ["contextMenus", "scripting", "activeTab", "storage"],
-  "host_permissions": ["https://lilypham7811.github.io/LearningEnglish/*", "http://localhost:8000/*"],
+  "host_permissions": ["https://lilypham7811.github.io/LearningEnglish/*", "http://localhost:8000/*", "https://www.youtube.com/*", "https://www.youtube-nocookie.com/*"],
   "content_scripts": [
     { "matches": ["https://lilypham7811.github.io/LearningEnglish/*", "http://localhost:8000/*"], "js": ["app-bridge.js"], "run_at": "document_idle" }
   ],

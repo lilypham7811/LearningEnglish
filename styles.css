@@ -439,3 +439,41 @@ dialog.sheet::backdrop { background: rgba(14, 20, 17, .45); }
 .migrate { border: 2px solid var(--turmeric); background: var(--turmeric-soft); }
 .migrate .panel-body { font-size: .95rem; }
 .sync-err { color: var(--bad) !important; }
+
+/* Video subtitles (clickable words) */
+.video-frame #ytPlayer, .video-frame iframe { width: 100%; height: 100%; border: 0; display: block; }
+.subbar { min-height: 4.2rem; display: flex; align-items: center; justify-content: center; text-align: center; padding: .7rem 1rem; background: #0E1411; color: #F7E8C6; font-size: 1.25rem; font-weight: 600; line-height: 1.4; }
+.subbar .sub-empty { font-size: .9rem; font-weight: 400; color: #A8B6AD; }
+.w2 { cursor: pointer; border-radius: .25rem; padding: 0 .05em; transition: background .1s; }
+.w2:hover { background: color-mix(in srgb, var(--turmeric) 45%, transparent); }
+.subbar .w2:hover { background: #E8B34A; color: #0E1411; }
+.cues { max-height: 22rem; overflow-y: auto; display: flex; flex-direction: column; gap: .15rem; padding-right: .3rem; }
+.cue { display: flex; gap: .6rem; align-items: baseline; padding: .3rem .4rem; border-radius: .5rem; line-height: 1.5; }
+.cue.on { background: var(--leaf-tint); box-shadow: inset 3px 0 0 var(--leaf); }
+.cue-t { flex: none; border: 0; background: var(--surface-2); color: var(--leaf); font-size: .78rem; font-weight: 600; border-radius: .4rem; padding: .1rem .45rem; font-variant-numeric: tabular-nums; cursor: pointer; }
+.sub-setup { display: flex; flex-direction: column; gap: .5rem; margin-top: .6rem; padding: .8rem 1rem; border-radius: .8rem; background: var(--leaf-tint); }
+.sub-setup ol { margin: .4rem 0; padding-left: 1.2rem; }
+
+/* Word popover and selection button */
+.word-pop { position: absolute; z-index: 70; display: flex; align-items: center; gap: .35rem; flex-wrap: wrap; max-width: calc(100vw - 16px); padding: .5rem .6rem; background: var(--surface); border: 1px solid var(--line); border-radius: .8rem; box-shadow: var(--shadow); }
+.word-pop b { font-size: 1.05rem; margin-right: .2rem; }
+.sel-save { position: absolute; z-index: 70; box-shadow: var(--shadow); }
+
+/* Word list */
+.words-kpis { grid-template-columns: repeat(2, minmax(8rem, 1fr)); }
+.words-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(19rem, 1fr)); gap: .8rem; }
+.words-list .empty { grid-column: 1 / -1; }
+.wcard { display: flex; flex-direction: column; gap: .3rem; padding: .85rem 1rem; background: var(--surface); border: 1px solid var(--line); border-radius: 1rem; box-shadow: var(--shadow); }
+.wc-top { display: flex; align-items: baseline; gap: .5rem; flex-wrap: wrap; }
+.wc-word { font-family: var(--f-display); font-size: 1.35rem; }
+.wc-box { color: var(--leaf); font-size: .7rem; letter-spacing: 1px; }
+.wc-mean { font-weight: 500; }
+.wc-def, .wc-ex { color: var(--ink-2); font-size: .9rem; }
+.wc-ctx { font-style: italic; color: var(--ink-2); font-size: .92rem; }
+.wc-ctx mark { background: var(--hl); color: inherit; font-style: normal; font-weight: 600; border-radius: .2rem; padding: 0 .15rem; }
+.wc-acts { display: flex; flex-wrap: wrap; align-items: center; gap: .35rem; margin-top: .3rem; }
+.review-start { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .8rem; }
+.flash { display: flex; flex-direction: column; align-items: center; text-align: center; gap: .45rem; padding: 1.4rem 1rem; }
+.flash-word { font-family: var(--f-display); font-size: 2.2rem; font-weight: 600; display: flex; align-items: center; gap: .6rem; }
+.flash-acts { justify-content: center; margin-top: .4rem; }
+.chip.kind-words { background: color-mix(in srgb, var(--r7) 14%, var(--surface)); color: var(--r7); }

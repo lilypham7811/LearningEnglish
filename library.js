@@ -128,18 +128,21 @@
   }
 
   // The text the AI works from: a video's transcript (Gemini watches the video once), an article's body, a speech.
-  async function sourceText(kind, item, onStatus) {
+  async function sourceText(kind, item, onStatus, { needCues = false } = {}) {
     if (kind === "video") {
-      if (item.transcript) return item.transcript;
-      onStatus("Google AI đang xem video và chép lời thoại (lần đầu, mất khoảng 10–40 giây)…");
+      if (item.cues?.length) return cuesText(item.cues);
+      if (item.transcript && !needCues) return item.transcript; // older transcript without times
+      onStatus("Google AI đang xem video và chép lời thoại kèm thời gian (lần đầu, mất khoảng 10–60 giây)…");
       const t = await gemini({ contents: [{ role: "user", parts: [
         { fileData: { fileUri: item.url } },
-        { text: "Transcribe all speech in this video in English, word for word, as readable paragraphs separated by blank lines. Output only the transcript." },
+        { text: "Transcribe all speech in this video in English, word for word. Put each sentence on its own line, " +
+          "starting with the time in the video when that sentence starts, as [m:ss] (or [h:mm:ss]). Output only those lines." },
       ] }] });
-      updateItem(kind, item.id, { transcript: t });
-      item.transcript = t;
+      const cues = parseCues(t);
+      const transcript = cues.length ? cuesText(cues) : t;
+      Object.assign(item, updateItem(kind, item.id, { transcript, cues }));
       if (ui.video.open === item.id) renderTranscript(item);
-      return t;
+      return transcript;
     }
     if (kind === "article") {
       if (item.text) return item.text;
@@ -316,8 +319,8 @@
       const msgs = [...(item.chat || []), { role: "user", text: "📝 Lời thoại" }];
       item = updateItem(kind, id, { chat: msgs });
       return run(kind, id, async (status) => {
-        const t = await sourceText(kind, getItem(kind, id), status);
-        return { role: "model", text: "Lời thoại đầy đủ đã hiện bên trái, dưới video (mục **📝 Lời thoại**). Bạn có thể đọc theo khi xem.\n\n" + t.slice(0, 600) + (t.length > 600 ? "…" : "") };
+        const t = await sourceText(kind, getItem(kind, id), status, { needCues: true });
+        return { role: "model", text: "Phụ đề đã hiện **ngay dưới video** và chạy theo video. **Bấm vào một từ** (ví dụ một từ mới) để lưu vào **Sổ từ vựng**. Danh sách lời thoại đầy đủ ở mục **📝 Lời thoại**.\n\n" + t.slice(0, 400) + (t.length > 400 ? "…" : "") };
       });
     }
     const A = ACTIONS[action];
@@ -480,7 +483,7 @@
       ${kind === "speech" ? `<div class="today-box" id="speechToday"></div>` : ""}</div>`;
     if (ui[kind].open) {
       root.innerHTML = head + `<div class="toolbar"><button class="btn" data-back>← Danh sách ${k.unit === "video" ? "video" : "bài"}</button></div><div id="detail-${kind}"></div>`;
-      root.querySelector("[data-back]").onclick = () => { ui[kind].open = null; SE.endSession(); window.SE_BUSY = false; render(kind); };
+      root.querySelector("[data-back]").onclick = () => { ui[kind].open = null; SE.endSession(); stopPlayer(); render(kind); };
       renderDetail(kind);
     } else {
       root.innerHTML = head + addPanel(kind) + `
@@ -647,10 +650,15 @@
   function renderDetail(kind) {
     const item = getItem(kind, ui[kind].open);
     const box = $("detail-" + kind);
+    if (kind === "video") stopPlayer();
     if (!item || !box) return;
+    box.dataset.srcKind = kind;
+    box.dataset.srcTitle = item.title;
+    box.dataset.srcUrl = item.url || "";
     let left = "";
     if (kind === "video") {
-      left = `<div class="panel"><div class="video-frame"><iframe src="https://www.youtube-nocookie.com/embed/${item.videoId}?rel=0" title="${esc(item.title)}" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe></div>
+      left = `<div class="panel"><div class="video-frame"><div id="ytPlayer"></div></div>
+        <div class="subbar" id="subBar" aria-live="polite"></div>
         <div class="panel-body"><h3 class="d-title">${esc(item.title)}</h3><div class="card-meta">${esc(item.channel || "YouTube")} · lưu ngày ${dateVi(item.savedAt)}</div>
         <div class="toolbar d-acts"><a class="btn" href="${esc(item.url)}" target="_blank" rel="noopener" data-open-link>↗ Mở trên YouTube</a><button class="btn ghost danger" data-del>🗑 Xóa</button></div>
         <div id="transcriptBox"></div></div></div>`;
@@ -685,7 +693,7 @@
     box.innerHTML = `<div class="detail-grid"><div class="detail-main">${left}</div><aside class="detail-ai">${chatHtml(kind)}</aside></div>`;
     wireChat(kind);
     renderChat(kind, item);
-    if (kind === "video") renderTranscript(item);
+    if (kind === "video") { renderTranscript(item); startPlayer(item); }
     wireDetail(kind, item);
   }
 
@@ -693,12 +701,132 @@
     return text.split(/\n\s*\n|\n/).map((p) => p.trim()).filter(Boolean)
       .map((p) => `<p>${(p.match(/[^.!?]+[.!?]+["”’)]*|[^.!?]+$/g) || [p]).map((s) => `<span class="sent">${esc(s.trim())}</span>`).join(" ")}</p>`).join("");
   }
+  // ---------- Video: clickable subtitles that follow the video ----------
+  // Cues = [{ t: seconds, text }]. They come from Google AI (timestamped transcript) or from the
+  // transcript the learner copies from YouTube ("Show transcript"), so this works without a key too.
+  const fmtT = (s) => { s = Math.floor(s); const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), x = String(s % 60).padStart(2, "0"); return h ? `${h}:${String(m).padStart(2, "0")}:${x}` : `${m}:${x}`; };
+  const toSec = (str) => str.split(":").map(Number).reduce((a, n) => a * 60 + n, 0);
+  const cuesText = (cues) => cues.map((c) => c.text).join(" ").replace(/\s+/g, " ").trim();
+  function parseCues(raw) {
+    const cues = [];
+    let t = null;
+    for (let line of raw.split(/\r?\n/)) {
+      line = line.replace(/\*\*/g, "").trim();
+      if (!line) continue;
+      let m = line.match(/^\[?((?:\d+:)?\d{1,2}:\d{2})\]?\s*[-–:]?\s*(.*)$/); // "[0:12] text", "0:12 text" or "0:12" alone
+      if (m && /^\d/.test(line.replace("[", ""))) {
+        t = toSec(m[1]);
+        if (m[2] && !/^\d+\s*(seconds?|minutes?|giây|phút)/i.test(m[2])) cues.push({ t, text: m[2] });
+        continue;
+      }
+      if (t == null || /^\d+\s*(seconds?|minutes?|giây|phút)/i.test(line)) continue; // YouTube adds "12 seconds" under each time
+      const last = cues[cues.length - 1];
+      if (last && last.t === t) last.text += " " + line; else cues.push({ t, text: line });
+    }
+    return cues.filter((c) => /[a-z]/i.test(c.text)).sort((a, b) => a.t - b.t);
+  }
+  const wordSpans = (text) => text.split(/(\s+)/).map((tok) => (/[a-z]/i.test(tok) ? `<span class="w2">${esc(tok)}</span>` : esc(tok))).join("");
+
   function renderTranscript(item) {
     const box = $("transcriptBox");
     if (!box) return;
-    box.innerHTML = item.transcript
-      ? `<details class="transcript" open><summary>📝 Lời thoại <span class="muted small">(bấm vào câu để nghe đọc)</span></summary><div class="reader-text">${paragraphs(item.transcript)}</div></details>`
-      : `<p class="hint small">📝 Bấm “Lời thoại” bên Google AI để AI chép lại toàn bộ lời nói trong video.</p>`;
+    if (item.cues?.length) {
+      box.innerHTML = `<details class="transcript" open><summary>📝 Lời thoại <span class="muted small">(bấm thời gian để tua, bấm một từ để lưu)</span></summary>
+        <div class="cues">${item.cues.map((c, i) => `<div class="cue" data-i="${i}"><button type="button" class="cue-t" data-t="${c.t}">${fmtT(c.t)}</button><span class="cue-x">${wordSpans(c.text)}</span></div>`).join("")}</div></details>`;
+      return;
+    }
+    box.innerHTML = `<div class="sub-setup">
+      <b>💬 Phụ đề bấm được chữ</b>
+      <p class="hint small">Để bấm vào một từ trong phụ đề (ví dụ <i>laudable</i>) và lưu vào Sổ từ vựng, app cần lời thoại có thời gian:</p>
+      ${SE.geminiKey() ? `<button type="button" class="btn primary" data-make-subs>✨ Tạo phụ đề bằng Google AI</button>` : ""}
+      <details class="paste-more" ${SE.geminiKey() ? "" : "open"}><summary>📋 Dán lời thoại từ YouTube (không cần khoá)</summary>
+        <ol class="hint small"><li>Mở video trên YouTube (máy tính), bấm <b>…thêm</b> dưới video → <b>Hiện bản chép lời</b> (Show transcript).</li>
+          <li>Bấm vào khung lời thoại bên phải, kéo chọn từ đầu đến cuối (hoặc Ctrl+A trong khung), Ctrl+C.</li>
+          <li>Dán vào ô dưới, bấm <b>Lưu phụ đề</b>.</li></ol>
+        <textarea class="input" rows="5" data-cues-paste placeholder="0:00&#10;Good evening and welcome…&#10;0:04&#10;The university merger…"></textarea>
+        <div class="toolbar"><button type="button" class="btn" data-cues-save>Lưu phụ đề</button><span class="hint small" data-cues-msg></span></div>
+      </details>
+      ${item.transcript ? `<details class="transcript"><summary>📝 Lời thoại cũ (chưa có thời gian)</summary><div class="reader-text">${paragraphs(item.transcript)}</div></details>` : ""}
+    </div>`;
+    box.querySelector("[data-make-subs]")?.addEventListener("click", () => ask("video", "transcript"));
+    box.querySelector("[data-cues-save]").onclick = () => {
+      const cues = parseCues(box.querySelector("[data-cues-paste]").value);
+      if (cues.length < 2) { box.querySelector("[data-cues-msg]").textContent = "Chưa đọc được. Cần có cả dòng thời gian (0:12) và dòng chữ."; return; }
+      Object.assign(item, updateItem("video", item.id, { cues, transcript: cuesText(cues) }));
+      renderTranscript(item);
+      toast(`✓ Đã lưu phụ đề (${cues.length} câu). Bấm ▶ để xem, bấm một từ để lưu.`);
+    };
+  }
+
+  // YouTube player through the IFrame API, so the app knows the current time.
+  const yt = { player: null, timer: 0, item: null, cur: -1 };
+  let ytApi = null;
+  function loadYtApi() {
+    if (window.YT?.Player) return Promise.resolve();
+    ytApi ||= new Promise((res) => {
+      const prev = window.onYouTubeIframeAPIReady;
+      window.onYouTubeIframeAPIReady = () => { prev?.(); res(); };
+      const s = document.createElement("script");
+      s.src = "https://www.youtube.com/iframe_api";
+      document.head.appendChild(s);
+    });
+    return ytApi;
+  }
+  async function startPlayer(item) {
+    yt.item = item;
+    yt.cur = -1;
+    await loadYtApi();
+    if (yt.item !== item || !$("ytPlayer")) return;
+    yt.player = new YT.Player("ytPlayer", {
+      videoId: item.videoId,
+      host: "https://www.youtube-nocookie.com",
+      playerVars: { rel: 0, playsinline: 1, modestbranding: 1 },
+      events: { onStateChange: (e) => { window.SE_BUSY = e.data === 1; } },
+    });
+    yt.timer = setInterval(syncSubs, 250);
+    syncSubs();
+  }
+  function stopPlayer() {
+    clearInterval(yt.timer);
+    try { yt.player?.destroy(); } catch {}
+    yt.player = null;
+    yt.item = null;
+    window.SE_BUSY = false;
+  }
+  const nowT = () => { try { return yt.player?.getCurrentTime?.() || 0; } catch { return 0; } };
+  function syncSubs() {
+    const bar = $("subBar");
+    if (!bar || !yt.item) return stopPlayer();
+    const cues = getItem("video", yt.item.id)?.cues || [];
+    if (!cues.length) { bar.innerHTML = `<span class="sub-empty">Chưa có phụ đề bấm được. Xem hướng dẫn ở mục 💬 bên dưới.</span>`; return; }
+    const t = nowT() + 0.2;
+    let i = -1;
+    for (let k = 0; k < cues.length && cues[k].t <= t; k++) i = k;
+    if (i === yt.cur) return;
+    yt.cur = i;
+    bar.innerHTML = i < 0 ? `<span class="sub-empty">Bấm ▶ để xem. Phụ đề sẽ hiện ở đây, bấm một từ để lưu.</span>` : `<span class="sub-line">${wordSpans(cues[i].text)}</span>`;
+    const list = document.querySelector("#transcriptBox .cues");
+    list?.querySelectorAll(".cue.on").forEach((x) => x.classList.remove("on"));
+    const row = list?.querySelector(`.cue[data-i="${i}"]`);
+    if (row) { row.classList.add("on"); list.scrollTo({ top: row.offsetTop - list.offsetTop - 40, behavior: "smooth" }); }
+  }
+  // A word in the subtitle bar or transcript: pause, then offer to save it with its sentence and time.
+  function onSubWord(el) {
+    const cueEl = el.closest(".cue");
+    const cues = getItem("video", yt.item?.id)?.cues || [];
+    const cue = cueEl ? cues[+cueEl.dataset.i] : cues[yt.cur];
+    const t = cue ? cue.t : nowT();
+    try { yt.player?.pauseVideo(); } catch {}
+    const item = yt.item;
+    window.SE_WORDS?.popover(el, {
+      word: el.textContent,
+      context: cue?.text || "",
+      sourceKind: "video",
+      sourceTitle: item.title,
+      sourceUrl: `${item.url}&t=${Math.floor(t)}s`,
+      sourceId: item.id,
+      time: t,
+    });
   }
 
   function wireDetail(kind, item) {
@@ -711,10 +839,17 @@
       SE.endSession();
       render(kind);
     };
+    // Video subtitles: click a word to save it, click a time to jump there.
+    box.querySelector(".detail-main").addEventListener("click", (e) => {
+      const w = e.target.closest(".w2");
+      if (w) return onSubWord(w);
+      const tb = e.target.closest(".cue-t");
+      if (tb) { try { yt.player?.seekTo(+tb.dataset.t, true); yt.player?.playVideo(); } catch {} }
+    });
     // Click a sentence to hear it.
     box.querySelector(".detail-main").addEventListener("click", (e) => {
       const s = e.target.closest(".sent");
-      if (!s) return;
+      if (!s || getSelection().toString().trim()) return; // selecting a word to save it, not listening
       box.querySelectorAll(".sent.on").forEach((x) => x.classList.remove("on"));
       s.classList.add("on");
       SE.track("read");
@@ -961,6 +1096,7 @@
   }
   document.addEventListener("se:view", (e) => {
     const v = e.detail;
+    if (v !== "video") stopPlayer();
     if (!KINDS[v]) return;
     render(v);
     // Reopening a section with an item open resumes timing for it.
@@ -982,12 +1118,15 @@
   // ---------- Items sent by the browser extension ----------
   window.addEventListener("message", (e) => {
     if (e.source !== window || e.data?.source !== "se-ext" || !Array.isArray(e.data.items)) return;
-    const items = e.data.items;
+    const words = e.data.items.filter((x) => x?.kind === "word");
+    const items = e.data.items.filter((x) => x?.kind !== "word");
+    words.forEach((w) => window.SE_WORDS?.save(w));
     (async () => {
       for (let i = 0; i < items.length; i++) await addItem(items[i], { open: i === items.length - 1 });
     })();
   });
   window.postMessage({ source: "se-app", type: "ready" }, location.origin);
 
+  window.SE_LIB = { gemini, toast };
   updateNav();
 })();
