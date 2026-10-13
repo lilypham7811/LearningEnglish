@@ -541,13 +541,10 @@ Name2: English sentence | Vietnamese translation`;
   }
 
   // Backup of everything (my dialogs, videos, articles, speeches, practice log, settings except the Google key)
-  // as one .json file, to move between computer and phone.
-  const BACKUP_LISTS = ["saved", "videos", "articles", "speeches", "log"];
-  const BACKUP_PREFS = ["level", "aiModel", "alwaysAi", "showVi", "voices", "geminiVoice"];
+  // as one .json file. Merging works like sync (sync.js), so importing twice never duplicates anything.
   function exportSaved() {
-    const data = {};
-    for (const k of [...BACKUP_LISTS, ...BACKUP_PREFS]) { const v = safeGet(k); if (v != null) data[k] = v; }
-    const blob = new Blob([JSON.stringify({ app: "shadow-english", version: 2, exportedAt: new Date().toISOString(), data })], { type: "application/json" });
+    const data = window.SE_SYNC.collect(false);
+    const blob = new Blob([JSON.stringify({ app: "shadow-english", version: 3, exportedAt: new Date().toISOString(), data })], { type: "application/json" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
     a.download = `shadow-english-sao-luu-${new Date().toISOString().slice(0, 10)}.json`;
@@ -560,16 +557,8 @@ Name2: English sentence | Vietnamese translation`;
       // Version 1 backups were just the array of saved dialogs.
       const data = Array.isArray(json) ? { saved: json } : json?.app === "shadow-english" ? json.data : null;
       if (!data) throw 0;
-      let added = 0;
-      for (const k of BACKUP_LISTS) {
-        if (!Array.isArray(data[k])) continue;
-        const cur = safeGet(k) || [];
-        const have = new Set(cur.map((x) => x.id));
-        const extra = data[k].filter((x) => x && x.id && !have.has(x.id));
-        added += extra.length;
-        safeSet(k, k === "log" ? [...cur, ...extra].sort((a, b) => a.start - b.start) : [...extra, ...cur]);
-      }
-      for (const k of BACKUP_PREFS) if (data[k] != null && safeGet(k) == null) safeSet(k, data[k]);
+      const { added } = window.SE_SYNC.merge(data);
+      window.SE_SYNC.dirty();
       alert(`Đã nhập ${added} mục. App sẽ tải lại.`);
       location.reload();
     } catch {
@@ -1120,7 +1109,38 @@ Name2: English sentence | Vietnamese translation`;
   const wait = (ms) => new Promise((r) => setTimeout(r, ms));
   const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   function safeGet(k) { try { return JSON.parse(localStorage.getItem("se_" + k)); } catch { return null; } }
-  function safeSet(k, v) { try { localStorage.setItem("se_" + k, JSON.stringify(v)); return true; } catch { return false; } }
+  // Synced lists: every changed item gets updatedAt, every removed item a tombstone, so computer and phone
+  // can merge their copies (newest version of each item wins, deletions spread). sync.js does the merging.
+  const SYNC_LISTS = ["saved", "videos", "articles", "speeches", "log"];
+  const SYNC_PREFS = ["level", "aiModel", "alwaysAi", "showVi", "voices", "geminiVoice", "geminiKey"];
+  function safeSet(k, v) {
+    try {
+      if (SYNC_LISTS.includes(k) && Array.isArray(v)) v = stampList(k, v);
+      localStorage.setItem("se_" + k, JSON.stringify(v));
+      if (SYNC_LISTS.includes(k) || SYNC_PREFS.includes(k)) window.SE_SYNC?.dirty();
+      return true;
+    } catch { return false; }
+  }
+  // Write without stamping (used by sync.js when it applies data from the other device).
+  function rawSet(k, v) { try { localStorage.setItem("se_" + k, JSON.stringify(v)); return true; } catch { return false; } }
+  function stampList(k, next) {
+    const strip = (x) => JSON.stringify({ ...x, updatedAt: 0 });
+    const before = new Map((safeGet(k) || []).filter((x) => x?.id).map((x) => [x.id, strip(x)]));
+    const now = Date.now();
+    const ids = new Set();
+    const out = next.map((x) => {
+      if (!x?.id) return x;
+      ids.add(x.id);
+      return before.get(x.id) === strip(x) ? x : { ...x, updatedAt: now };
+    });
+    const removed = [...before.keys()].filter((id) => !ids.has(id));
+    if (removed.length) {
+      const tomb = safeGet("tomb") || {};
+      removed.forEach((id) => { tomb[id] = now; });
+      rawSet("tomb", tomb);
+    }
+    return out;
+  }
 
   function updateAiNote() {
     const m = currentModel();
@@ -1312,6 +1332,15 @@ Name2: English sentence | Vietnamese translation`;
   window.SE = {
     get dialog() { return state.dialog; },
     geminiKey, openAiMode, track, trackScore, startSession, endSession, stopAll, closeShadow, openSettings, showView, safeGet, safeSet, esc, LEVELS,
+    rawSet, saveSession, SYNC_LISTS, SYNC_PREFS,
+    // Redraw everything after sync brought in data from the other device.
+    refreshAll: () => {
+      renderSaved();
+      updateNavProgress();
+      updateAiState();
+      $("geminiKey").value = geminiKey();
+      if (!$("view-progress").hidden) renderProgress();
+    },
     levelName: (lv) => LEVEL_VI[lv] || lv,
     // Speech helpers for sections 3-5.
     say: (text, rate = state.rate) => { stopAll(); state.playToken++; return speak(text, state.voiceA, rate); },

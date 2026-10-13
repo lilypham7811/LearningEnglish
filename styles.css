@@ -434,3 +434,8 @@ dialog.sheet::backdrop { background: rgba(14, 20, 17, .45); }
 .sheet label.toggle { display: flex; font-weight: 400; }
 .sheet textarea { margin-top: .7rem; }
 .sheet-actions { display: flex; gap: .5rem; justify-content: flex-end; margin-top: 1rem; }
+
+/* Sync and moving off localhost */
+.migrate { border: 2px solid var(--turmeric); background: var(--turmeric-soft); }
+.migrate .panel-body { font-size: .95rem; }
+.sync-err { color: var(--bad) !important; }

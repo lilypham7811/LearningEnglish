@@ -968,6 +968,12 @@
     if (it) SE.startSession({ id: it.id, title: it.title }, v);
   });
 
+  // Data arrived from the other device: update counts, and redraw a section's list (not an open item, to keep your place).
+  document.addEventListener("se:synced", () => {
+    updateNav();
+    for (const k of Object.keys(KINDS)) if (!$("view-" + k).hidden && !ui[k].open) render(k);
+  });
+
   // A key added or removed in Settings changes how the AI chat works: redraw the open section.
   $("settings").addEventListener("close", () => {
     for (const k of Object.keys(KINDS)) if (!$("view-" + k).hidden) render(k);
