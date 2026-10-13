@@ -659,6 +659,10 @@
     if (kind === "video") {
       left = `<div class="panel"><div class="video-frame"><div id="ytPlayer"></div></div>
         <div class="subbar" id="subBar" aria-live="polite"></div>
+        <form class="quick-word" id="quickWord" autocomplete="off">
+          <input class="input" name="w" placeholder="Thấy từ hay trên phụ đề? Gõ vào đây rồi Enter để lưu (vd: laudable)" />
+          <button class="btn primary">⭐ Lưu từ</button>
+        </form>
         <div class="panel-body"><h3 class="d-title">${esc(item.title)}</h3><div class="card-meta">${esc(item.channel || "YouTube")} · lưu ngày ${dateVi(item.savedAt)}</div>
         <div class="toolbar d-acts"><a class="btn" href="${esc(item.url)}" target="_blank" rel="noopener" data-open-link>↗ Mở trên YouTube</a><button class="btn ghost danger" data-del>🗑 Xóa</button></div>
         <div id="transcriptBox"></div></div></div>`;
@@ -839,6 +843,20 @@
       SE.endSession();
       render(kind);
     };
+    // Type a word seen on the video (eJOY / YouTube subtitles) to save it with the current second.
+    box.querySelector("#quickWord")?.addEventListener("submit", (e) => {
+      e.preventDefault();
+      const word = e.target.w.value.trim();
+      if (!word) return;
+      const t = nowT();
+      const cues = getItem("video", item.id)?.cues || [];
+      let i = -1;
+      for (let k = 0; k < cues.length && cues[k].t <= t + 0.2; k++) i = k;
+      const near = [cues[i], cues[i - 1], cues[i + 1]].find((c) => c?.text.toLowerCase().includes(word.toLowerCase()));
+      window.SE_WORDS.save({ word, context: near?.text || "", sourceKind: "video", sourceTitle: item.title,
+        sourceUrl: `${item.url}&t=${Math.floor(t)}s`, sourceId: item.id, time: t });
+      e.target.w.value = "";
+    });
     // Video subtitles: click a word to save it, click a time to jump there.
     box.querySelector(".detail-main").addEventListener("click", (e) => {
       const w = e.target.closest(".w2");
