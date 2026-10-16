@@ -479,3 +479,47 @@ dialog.sheet::backdrop { background: rgba(14, 20, 17, .45); }
 .chip.kind-words { background: color-mix(in srgb, var(--r7) 14%, var(--surface)); color: var(--r7); }
 .quick-word { display: flex; gap: .4rem; padding: .6rem .8rem; background: var(--leaf-tint); border-bottom: 1px solid var(--line-2); }
 .quick-word .input { flex: 1; }
+
+/* Word list as a table: word | POS + IPA | listen, say | Oxford | Vietnamese | 3 examples */
+.words-kpis { grid-template-columns: repeat(3, minmax(7rem, 1fr)); }
+.words-table-wrap { overflow: hidden; }
+table.words-table { min-width: 980px; table-layout: fixed; }
+.words-table th:nth-child(1) { width: 12%; } .words-table th:nth-child(2) { width: 12%; } .words-table th:nth-child(3) { width: 12%; }
+.words-table th:nth-child(4) { width: 22%; } .words-table th:nth-child(5) { width: 14%; } .words-table th:nth-child(6) { width: 28%; }
+.words-table td { vertical-align: top; position: relative; }
+.words-table .wc-word { font-family: var(--f-display); font-size: 1.25rem; display: block; }
+.wc-meta { margin: .25rem 0; }
+.wc-src { font-size: .8rem; }
+.wc-del { position: absolute; right: .3rem; bottom: .3rem; border: 0; background: none; opacity: .35; cursor: pointer; font-size: .85rem; }
+.words-table tr:hover .wc-del { opacity: .9; }
+.wc-ipa { color: var(--ink-2); font-size: .92rem; margin-top: .25rem; font-family: "Segoe UI", system-ui, sans-serif; }
+.wc-acts { display: flex; flex-direction: column; align-items: flex-start; gap: .3rem; }
+.wc-score { margin-top: .3rem; font-size: .85rem; }
+.wc-def { font-size: .93rem; }
+.wc-ox { display: inline-block; margin-top: .3rem; font-size: .8rem; }
+.wc-exs { margin: 0; padding-left: 1.1rem; font-size: .9rem; color: var(--ink-2); }
+.wc-exs li { margin: 0 0 .3rem; }
+.wc-exs li.mine { color: var(--ink); }
+.wc-exs mark { background: var(--hl); color: inherit; border-radius: .2rem; padding: 0 .1rem; }
+.ex-say { border: 0; background: none; cursor: pointer; padding: 0; font-size: .8rem; }
+.chip.st-due { background: var(--bad-soft); color: var(--bad); }
+.chip.st-done { background: var(--good-soft); color: var(--good); }
+.empty-row { text-align: center; color: var(--ink-2); padding: 1.6rem !important; }
+.sched-wrap { padding-top: 0; }
+.sched { display: flex; gap: .4rem; flex-wrap: wrap; margin-top: .35rem; }
+.sched-day { display: flex; flex-direction: column; align-items: center; min-width: 4.6rem; padding: .35rem .5rem; border-radius: .6rem; background: var(--surface-2); font-size: .75rem; color: var(--ink-3); }
+.sched-day b { font-size: 1.1rem; color: var(--ink-3); font-family: var(--f-display); }
+.sched-day.has { background: var(--leaf-tint); color: var(--ink-2); }
+.sched-day.has b { color: var(--leaf); }
+.flash .wc-exs { text-align: left; max-width: 36rem; }
+@media (max-width: 760px) {
+  table.words-table { min-width: 0; table-layout: auto; }
+  .words-table thead { display: none; }
+  .words-table, .words-table tbody, .words-table tr, .words-table td { display: block; width: 100%; }
+  .words-table tr { padding: .8rem .9rem; border-bottom: 1px solid var(--line); }
+  .words-table td { border: 0 !important; padding: .2rem 0 !important; }
+  .words-table td:not(:first-child)::before { content: attr(data-label); display: block; font-size: .7rem; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--ink-3); }
+  .words-table .table-scroll { overflow: visible; }
+  .wc-acts { flex-direction: row; }
+  .wc-del { top: .9rem; bottom: auto; opacity: .7; }
+}
