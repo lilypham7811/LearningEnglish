@@ -68,11 +68,62 @@
     let patch = null;
     try {
       if (SE.geminiKey() && window.SE_LIB) patch = await oxfordViaAi(it);
-    } catch { /* fall back to the free dictionary */ }
+    } catch { /* fall back to the free sources */ }
     if (!patch) {
-      try { patch = await freeDictionary(it.word.toLowerCase()); } catch { /* offline or not found */ }
+      // No key: Google's dictionary (Vietnamese meanings + Oxford Languages definitions and examples),
+      // topped up with IPA and extra examples from the free English dictionary.
+      const [g, f, t] = await Promise.all([googleDict(it.word).catch(() => null), freeDictionary(it.word.toLowerCase()).catch(() => null),
+        tatoeba(it.word).catch(() => [])]);
+      if (g || f) {
+        // Examples: one from Oxford first, then everyday sentences from Tatoeba, then the rest of Oxford's.
+        // The other free dictionary's examples are left out: they are often old quotes and headlines.
+        const byLen = (a, b) => a.split(" ").length - b.split(" ").length;
+        const ox = (g?.examples || []).sort(byLen);
+        const examples = [...ox.slice(0, 1), ...t, ...ox.slice(1)]
+          .filter((x, i, a) => a.findIndex((y) => y.toLowerCase() === x.toLowerCase()) === i)
+          .slice(0, 3);
+        patch = {
+          pos: g?.pos || f?.pos || "", ipa: f?.ipa || "", defEn: g?.defEn || f?.defEn || "",
+          meaningVi: g?.meaningVi || "", examples, dictSource: g ? "google" : "free",
+        };
+      }
     }
     if (patch) update(id, patch);
+  }
+
+  // Tatoeba: a free collection of simple, everyday sentences. Shortest first, 4–14 words, no near-duplicates
+  // ("His first answer was laudable" / "Her first answer was laudable").
+  async function tatoeba(word) {
+    const r = await fetch(`https://api.tatoeba.org/unstable/sentences?lang=eng&q=${encodeURIComponent("=" + word)}&sort=words&limit=15&showtrans=none`);
+    if (!r.ok) return [];
+    const seen = new Set();
+    return ((await r.json()).data || []).map((s) => s.text.trim())
+      .filter((s) => { const n = s.split(" ").length; return n >= 4 && n <= 14; })
+      .filter((s) => { const k = s.toLowerCase().split(" ").slice(1).join(" "); if (seen.has(k)) return false; seen.add(k); return true; })
+      .slice(0, 3);
+  }
+
+  // Google Translate's dictionary data (free, readable from the browser): Vietnamese meanings by part of speech,
+  // English definitions and example sentences from Oxford Languages.
+  const POS_EN = { "danh từ": "noun", "động từ": "verb", "tính từ": "adjective", "trạng từ": "adverb", "giới từ": "preposition",
+    "liên từ": "conjunction", "đại từ": "pronoun", "thán từ": "exclamation", "từ hạn định": "determiner", "tiền tố": "prefix", "hậu tố": "suffix" };
+  async function googleDict(word) {
+    const url = "https://translate.googleapis.com/translate_a/single?client=gtx&sl=en&tl=vi&hl=vi&dt=t&dt=bd&dt=md&dt=ex&dj=1&q=" + encodeURIComponent(word);
+    const r = await fetch(url);
+    if (!r.ok) return null;
+    // Google sends Vietnamese with separate accent marks (NFD); normalise so equal words compare equal.
+    const d = JSON.parse((await r.text()).normalize("NFC"));
+    const main = (d.sentences || []).map((s) => s.trans || "").join("").trim();
+    const terms = (d.dict || []).flatMap((x) => x.terms || []);
+    const vi = [main, ...terms].filter((x, i, a) => x && a.findIndex((y) => y.toLowerCase() === x.toLowerCase()) === i).slice(0, 3);
+    const tidy = (s) => { s = s.replace(/<[^>]+>/g, "").trim(); s = s[0].toUpperCase() + s.slice(1); return /[.!?]$/.test(s) ? s : s + "."; };
+    const firstDef = d.definitions?.[0];
+    return {
+      meaningVi: vi.join(", "),
+      pos: [...new Set((d.definitions || d.dict || []).map((x) => POS_EN[x.pos] || x.pos))].slice(0, 2).join(", "),
+      defEn: firstDef?.entry?.[0]?.gloss ? tidy(firstDef.entry[0].gloss) : "",
+      examples: (d.examples?.example || []).map((e) => tidy(e.text)).filter((x) => x.split(" ").length >= 3),
+    };
   }
   async function oxfordViaAi(it) {
     const url = `https://www.oxfordlearnersdictionaries.com/definition/english/${encodeURIComponent(it.word.toLowerCase().replace(/\s+/g, "-"))}`;
@@ -238,7 +289,9 @@
     renderReview();
     renderList();
     // Words saved while offline (or from the other device) still without a meaning: look them up now.
-    list().filter((w) => !w.defEn && !tried.has(w.id)).slice(0, 8).forEach((w) => { tried.add(w.id); lookup(w.id); });
+    // Also upgrades words looked up with the older, weaker dictionary (no Vietnamese meaning).
+    list().filter((w) => (!w.defEn || (!w.meaningVi && w.dictSource !== "oxford")) && !tried.has(w.id)).slice(0, 10)
+      .forEach((w) => { tried.add(w.id); lookup(w.id, { force: true }); });
   }
   const tried = new Set();
 
