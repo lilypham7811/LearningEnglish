@@ -1,7 +1,7 @@
 // Service worker: lets the installed app open offline (library dialogs, saved items, practice log).
 // App files: network first, so updates show up right away; the cached copy is used only when offline.
 // Google Fonts: cache first. Google AI and YouTube requests are never cached.
-const CACHE = "shadow-english-v10";
+const CACHE = "shadow-english-v11";
 const SHELL = [
   "./", "./index.html", "./styles.css?v=13", "./dialogs.js?v=13", "./app.js?v=13", "./live.js?v=13", "./library.js?v=13", "./words.js?v=13", "./sync.js?v=13",
   "./manifest.webmanifest", "./icons/icon-192.png", "./icons/icon-512.png", "./icons/apple-touch-icon.png",
@@ -21,7 +21,9 @@ self.addEventListener("fetch", (e) => {
   if (req.method !== "GET") return;
   const url = new URL(req.url);
   if (url.origin === location.origin) {
-    e.respondWith(fetch(req).then((res) => {
+    // cache: "no-cache" = always ask GitHub whether there is a newer version (GitHub lets browsers keep
+    // pages for 10 minutes otherwise, so updates seemed not to arrive).
+    e.respondWith(fetch(req, { cache: "no-cache" }).then((res) => {
       if (res.ok) { const copy = res.clone(); caches.open(CACHE).then((c) => c.put(req, copy)); }
       return res;
     }).catch(() => caches.match(req, { ignoreSearch: req.mode === "navigate" }).then((r) => r || caches.match("./index.html"))));
