@@ -374,8 +374,14 @@
       box.innerHTML = `<div class="panel-body review-start">
         <div><b>${d.length ? `🃏 Hôm nay ôn ${d.length} từ` : list().length ? "✓ Hôm nay đã ôn xong" : "🃏 Lịch ôn từ"}</b>
           <div class="hint small">Mỗi từ được ôn vào ngày thứ 1, 3, 7, 10 và 30 sau khi học. Ôn đủ 5 lần là <b>đã thuộc</b>. Bấm “Chưa nhớ” thì từ đó học lại từ đầu.</div></div>
-        ${d.length ? `<button class="btn primary" data-start>Bắt đầu ôn (${d.length})</button>` : ""}</div>
+        <div class="toolbar">${d.length ? `<button class="btn primary" data-start>Bắt đầu ôn (${d.length})</button>` : ""}
+          ${list().length ? `<button class="btn" data-voice>🎙️ Ôn bằng giọng nói</button>` : ""}</div></div>
         <div class="panel-body sched-wrap"><div class="muted small">7 ngày tới:</div>${scheduleHtml()}</div>`;
+      // Voice review in ChatGPT / Gemini: today's words, or the 12 newest if none are due.
+      box.querySelector("[data-voice]")?.addEventListener("click", () => {
+        const words = (d.length ? d : list()).slice(0, 12);
+        window.SE_HANDOFF.open({ title: `Ôn ${words.length} từ`, prompt: window.SE_HANDOFF.wordsPrompt(words) });
+      });
       box.querySelector("[data-start]")?.addEventListener("click", () => {
         ui.review = { queue: d.sort((a, b) => a.due - b.due).map((w) => w.id), shown: false, done: 0, again: new Set() };
         renderReview();

@@ -326,8 +326,11 @@
     const id = ui[kind].open;
     let item = getItem(kind, id);
     if (!item) return;
+    if (action === "live") { // talk by voice: ChatGPT / Gemini / AI Mode with your account, or in the app
+      return window.SE_HANDOFF.open({ title: item.title, prompt: window.SE_HANDOFF.contentPrompt(kind, item),
+        inApp: SE.geminiKey() ? () => startLive(kind, item) : null });
+    }
     if (!SE.geminiKey()) return askAiMode(kind, item, action, freeText);
-    if (action === "live") return startLive(kind, item);
     if (action === "transcript") {
       if (kind !== "video") return;
       const msgs = [...(item.chat || []), { role: "user", text: "📝 Lời thoại" }];

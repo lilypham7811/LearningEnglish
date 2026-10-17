@@ -49,9 +49,9 @@
   }
   function updateKeyUi() {
     const key = !!SE.geminiKey();
-    $("liveKeyMissing").hidden = key;
+    $("liveKeyMissing").hidden = true;
     $("liveStart").disabled = false;
-    $("liveStart").textContent = key ? "Bắt đầu nói chuyện" : "🔎 Luyện trong Google AI Mode ↗";
+    $("liveStart").textContent = "🎙️ Chọn ChatGPT, Gemini…" + (key ? " hoặc nói ngay trong app" : "");
   }
 
   // Without a key: the same practice, in Google AI Mode (new tab, prompt filled in).
@@ -329,7 +329,16 @@
   // ---------- Wire up ----------
   $("liveBtn").onclick = open;
   $("liveClose").onclick = close;
-  $("liveStart").onclick = start;
+  // Choose where to talk: ChatGPT / Gemini / AI Mode with your own account (voice handoff), or in the app.
+  $("liveStart").onclick = () => {
+    const mode = document.querySelector('input[name="liveMode"]:checked').value;
+    const d = SE.dialog;
+    window.SE_HANDOFF.open({
+      title: d.titleVi || d.title,
+      prompt: window.SE_HANDOFF.dialogPrompt(d, role, mode),
+      inApp: SE.geminiKey() ? () => start() : null,
+    });
+  };
   $("liveStop").onclick = () => (live.active || ws ? stop(true) : start());
   $("liveMute").onclick = () => {
     muted = !muted;

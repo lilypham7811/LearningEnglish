@@ -527,3 +527,11 @@ table.words-table { min-width: 980px; table-layout: fixed; }
 .bm-box { display: flex; flex-wrap: wrap; align-items: center; gap: .6rem 1rem; margin-top: .8rem; padding: .8rem 1rem; border-radius: .8rem; border: 2px dashed var(--leaf); background: var(--leaf-tint); }
 .bm-link { flex: none; display: inline-flex; align-items: center; padding: .55rem 1rem; border-radius: 99px; background: var(--leaf); color: var(--leaf-ink); font-weight: 700; text-decoration: none; cursor: grab; }
 .bm-box .hint { flex: 1 1 20rem; margin: 0; }
+
+/* Voice handoff chooser */
+.ho-list { display: flex; flex-direction: column; gap: .5rem; margin: .7rem 0; }
+.ho-btn { display: flex; align-items: center; gap: .8rem; text-align: left; padding: .75rem .9rem; border: 1px solid var(--line); border-radius: .8rem; background: var(--surface); cursor: pointer; }
+.ho-btn:hover { border-color: var(--leaf); background: var(--leaf-tint); }
+.ho-btn small { display: block; color: var(--ink-3); font-size: .82rem; }
+.ho-ic { font-size: 1.5rem; width: 2.2rem; text-align: center; }
+.handoff #hoPrompt { font-size: .82rem; }
