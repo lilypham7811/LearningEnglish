@@ -1,7 +1,8 @@
 // Right-click "Save to LearningEnglish": captures the page (YouTube video or news article)
-// and hands it to the app through app-bridge.js. Uses an open app tab (online or local), else opens the online app.
+// and hands it to the online app (https://lilypham7811.github.io/LearningEnglish/) through app-bridge.js.
+// Only the online app: it is the one on every device and the one that syncs with the phone.
 const APP = "https://lilypham7811.github.io/LearningEnglish/";
-const APP_URLS = [APP + "*", "http://localhost:8000/*"];
+const APP_URLS = [APP + "*"];
 
 chrome.runtime.onInstalled.addListener(() => {
   chrome.contextMenus.create({ id: "save-page", title: "Save this page to LearningEnglish", contexts: ["page", "video"] });
