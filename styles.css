@@ -524,3 +524,6 @@ table.words-table { min-width: 980px; table-layout: fixed; }
   .wc-del { top: .9rem; bottom: auto; opacity: .7; }
 }
 .toast-btn { margin-left: .6rem; border: 0; background: none; color: var(--turmeric-soft); font-weight: 700; text-decoration: underline; cursor: pointer; }
+.bm-box { display: flex; flex-wrap: wrap; align-items: center; gap: .6rem 1rem; margin-top: .8rem; padding: .8rem 1rem; border-radius: .8rem; border: 2px dashed var(--leaf); background: var(--leaf-tint); }
+.bm-link { flex: none; display: inline-flex; align-items: center; padding: .55rem 1rem; border-radius: 99px; background: var(--leaf); color: var(--leaf-ink); font-weight: 700; text-decoration: none; cursor: grab; }
+.bm-box .hint { flex: 1 1 20rem; margin: 0; }

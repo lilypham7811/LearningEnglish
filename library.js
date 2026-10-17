@@ -513,6 +513,42 @@
     if (kind === "speech") renderToday();
   }
 
+  // "⭐ Lưu vào LearningEnglish" bookmark (bookmarklet): works on YouTube and news sites in any browser,
+  // nothing to install or update. It opens the online app with the item in the address (#add=…).
+  function bookmarklet() {
+    var APP = "https://lilypham7811.github.io/LearningEnglish/";
+    if (location.href.indexOf(APP) === 0 || location.hostname === "localhost") {
+      alert("Kéo nút này lên thanh dấu trang. Sau đó bấm nó khi đang xem video YouTube hoặc đọc bài báo.");
+      return;
+    }
+    var sel = String(getSelection()).replace(/\s+/g, " ").trim();
+    var v = document.querySelector("video");
+    var t = v ? Math.floor(v.currentTime) : null;
+    var title = document.title.replace(/^\(\d+\)\s*/, "").replace(/ - YouTube$/, "");
+    var id = (location.href.match(/[?&]v=([\w-]{11})/) || location.href.match(/(?:shorts|embed|youtu\.be)\/([\w-]{11})/) || [])[1];
+    var items;
+    if (sel && sel.split(" ").length <= 5) {
+      var n = getSelection().anchorNode, el = n && (n.nodeType === 3 ? n.parentElement : n), ctx = "";
+      for (; el && el !== document.body; el = el.parentElement) {
+        var tx = (el.innerText || "").replace(/\s+/g, " ").trim();
+        if (tx.length >= 15) { ctx = tx.slice(0, 400); break; }
+      }
+      items = [{ kind: "word", word: sel, context: ctx, sourceKind: id ? "video" : "article", sourceTitle: title,
+        sourceUrl: id ? "https://www.youtube.com/watch?v=" + id + (t != null ? "&t=" + t + "s" : "") : location.href, time: t }];
+    } else if (id) {
+      items = [{ url: "https://www.youtube.com/watch?v=" + id, title: title }];
+    } else {
+      var meta = function (p) { var m = document.querySelector('meta[property="' + p + '"],meta[name="' + p + '"]'); return m ? m.content : ""; };
+      var root = document.querySelector("article") || document.querySelector("main") || document.body;
+      var ps = [].slice.call(root.querySelectorAll("p")).map(function (p) { return p.innerText.trim(); })
+        .filter(function (x) { return x.split(/\s+/).length >= 8; });
+      items = [{ kind: "article", url: location.href, title: meta("og:title") || title, site: meta("og:site_name") || location.hostname.replace(/^www\./, ""),
+        image: meta("og:image"), excerpt: meta("og:description"), text: ps.join("\n\n").slice(0, 20000) }];
+    }
+    window.open(APP + "#add=" + encodeURIComponent(JSON.stringify({ at: Date.now(), items: items })), "shadowenglish");
+  }
+  const BOOKMARKLET = "javascript:" + encodeURIComponent("(" + bookmarklet.toString() + ")()");
+
   function addPanel(kind) {
     if (kind === "speech") return `<div class="panel"><div class="panel-head"><h3>Thêm bài phát biểu</h3>
         <div class="seg" data-tabs><button type="button" data-t="ai" aria-pressed="true">✨ Nhờ AI viết</button><button type="button" data-t="paste" aria-pressed="false">📋 Dán bài</button></div></div>
@@ -548,7 +584,13 @@
         <button class="btn primary">＋ Lưu ${kind === "video" ? "video" : "bài báo"}</button></div>
         ${kind === "article" ? `<details class="paste-more"><summary>Dán thêm nội dung bài (nếu trang cần đăng nhập)</summary><textarea class="input" name="text" rows="5" placeholder="Dán nội dung bài báo…"></textarea></details>` : ""}
       </form>
-      <details class="ext-help"><summary>🧩 Cài nút chuột phải “Save to LearningEnglish” cho Chrome / Edge</summary>
+      <div class="bm-box">
+        <a class="bm-link" href="${BOOKMARKLET}" title="Kéo lên thanh dấu trang" draggable="true">⭐ Lưu vào LearningEnglish</a>
+        <div class="hint small"><b>Cách dễ nhất, không cần cài gì:</b> kéo nút xanh này lên <b>thanh dấu trang</b> của trình duyệt (nếu chưa thấy thanh dấu trang: nhấn <b>Ctrl+Shift+B</b>).
+          Sau đó, khi đang xem video YouTube hoặc đọc bài báo, bấm nút đó trên thanh dấu trang là bài được lưu vào đây.
+          Bôi đen một từ rồi bấm thì lưu từ đó vào Sổ từ vựng.</div>
+      </div>
+      <details class="ext-help"><summary>🧩 Hoặc dùng tiện ích chuột phải “Save to LearningEnglish” (Chrome / Edge)</summary>
         <ol>
           <li>Mở <code>chrome://extensions</code> (Edge: <code>edge://extensions</code>) và bật <b>Developer mode</b> (Chế độ nhà phát triển).</li>
           <li>Bấm <b>Load unpacked</b> và chọn thư mục <code>extension</code> trong thư mục app này.</li>
