@@ -44,12 +44,21 @@
   }
   const newId = (p) => p + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
 
-  function toast(text) {
+  // action = { label, run }: a button in the message (e.g. "Hoàn tác" to undo a save).
+  function toast(text, action) {
     const t = $("toast");
     t.textContent = text;
+    if (action) {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "toast-btn";
+      b.textContent = action.label;
+      b.onclick = () => { t.hidden = true; action.run(); };
+      t.append(" ", b);
+    }
     t.hidden = false;
     clearTimeout(toast.timer);
-    toast.timer = setTimeout(() => { t.hidden = true; }, 3200);
+    toast.timer = setTimeout(() => { t.hidden = true; }, action ? 8000 : 3200);
   }
 
   // ---------- YouTube helpers ----------
@@ -70,7 +79,7 @@
   const dateVi = (t) => new Date(t).toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit", year: "numeric" });
 
   // Add (or merge) an item coming from the page form or the browser extension.
-  async function addItem(raw, { open = false } = {}) {
+  async function addItem(raw, { open = false, undo = false } = {}) {
     const vid = youtubeId(raw.url || "");
     const kind = raw.kind || (vid ? "video" : "article");
     const items = list(kind);
@@ -95,7 +104,12 @@
         savedAt: Date.now(), chat: [] };
     }
     saveList(kind, [item, ...list(kind)]);
-    toast(`✓ Đã lưu: ${item.title}`);
+    toast(`✓ Đã lưu: ${item.title}`, undo ? { label: "Hoàn tác", run: () => {
+      saveList(kind, list(kind).filter((x) => x.id !== item.id));
+      if (ui[kind].open === item.id) ui[kind].open = null;
+      if (!$("view-" + kind).hidden) render(kind);
+      toast("Đã bỏ bài vừa lưu.");
+    } } : null);
     if (open) openItem(kind, item.id);
     else if (!$("view-" + kind).hidden) render(kind);
     return item;
@@ -1140,7 +1154,7 @@
     const items = e.data.items.filter((x) => x?.kind !== "word");
     words.forEach((w) => window.SE_WORDS?.save(w));
     (async () => {
-      for (let i = 0; i < items.length; i++) await addItem(items[i], { open: i === items.length - 1 });
+      for (let i = 0; i < items.length; i++) await addItem(items[i], { open: i === items.length - 1, undo: true });
     })();
   });
   window.postMessage({ source: "se-app", type: "ready" }, location.origin);

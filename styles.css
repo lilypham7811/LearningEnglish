@@ -523,3 +523,4 @@ table.words-table { min-width: 980px; table-layout: fixed; }
   .wc-acts { flex-direction: row; }
   .wc-del { top: .9rem; bottom: auto; opacity: .7; }
 }
+.toast-btn { margin-left: .6rem; border: 0; background: none; color: var(--turmeric-soft); font-weight: 700; text-decoration: underline; cursor: pointer; }

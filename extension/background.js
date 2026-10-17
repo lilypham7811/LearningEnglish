@@ -4,7 +4,7 @@ const APP = "https://lilypham7811.github.io/LearningEnglish/";
 const APP_URLS = [APP + "*", "http://localhost:8000/*"];
 
 chrome.runtime.onInstalled.addListener(() => {
-  chrome.contextMenus.create({ id: "save-page", title: "Save to LearningEnglish", contexts: ["page", "selection", "video", "image", "frame"] });
+  chrome.contextMenus.create({ id: "save-page", title: "Save this page to LearningEnglish", contexts: ["page", "video"] });
   chrome.contextMenus.create({ id: "save-link", title: "Save link to LearningEnglish", contexts: ["link"] });
   chrome.contextMenus.create({ id: "save-word", title: "Save word “%s” to LearningEnglish", contexts: ["selection"] });
 });
@@ -49,8 +49,23 @@ function grabWord() {
 }
 chrome.action.onClicked.addListener((tab) => save(tab, null, null));
 
+// Pages that are never a news article or video: the app itself, browser pages and new-tab pages
+// (including new-tab pages replaced by other extensions or sites).
+function notSavable(tab) {
+  const url = tab?.url || "";
+  return url.startsWith(APP) || url.startsWith("http://localhost:8000/") ||
+    /^(chrome|edge|about|chrome-extension|moz-extension):/.test(url) ||
+    /^(new tab|thẻ mới|trang mới|neuer tab|nouvel onglet)$/i.test((tab?.title || "").trim());
+}
+function refuse(tab) {
+  if (!tab?.id) return;
+  chrome.action.setBadgeBackgroundColor({ color: "#B23A28", tabId: tab.id });
+  chrome.action.setBadgeText({ text: "✕", tabId: tab.id });
+  setTimeout(() => chrome.action.setBadgeText({ text: "", tabId: tab.id }), 2500);
+}
+
 async function save(tab, linkUrl, selection) {
-  if (tab?.url?.startsWith(APP) || tab?.url?.startsWith("http://localhost:8000/")) return;
+  if (!linkUrl && notSavable(tab)) return refuse(tab);
   let item = linkUrl ? { url: linkUrl } : await capture(tab);
   // A long selection is the article text the user wants (useful on messy pages).
   if (!linkUrl && selection && selection.length > 300) item = { ...item, text: selection };
