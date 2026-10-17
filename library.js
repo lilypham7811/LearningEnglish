@@ -1148,14 +1148,28 @@
   });
 
   // ---------- Items sent by the browser extension ----------
-  window.addEventListener("message", (e) => {
-    if (e.source !== window || e.data?.source !== "se-ext" || !Array.isArray(e.data.items)) return;
-    const words = e.data.items.filter((x) => x?.kind === "word");
-    const items = e.data.items.filter((x) => x?.kind !== "word");
+  // The extension opens the app as …/LearningEnglish/#add=<items>; older versions posted a message instead.
+  function receive(all) {
+    const words = all.filter((x) => x?.kind === "word");
+    const items = all.filter((x) => x && x.kind !== "word");
     words.forEach((w) => window.SE_WORDS?.save(w));
     (async () => {
       for (let i = 0; i < items.length; i++) await addItem(items[i], { open: i === items.length - 1, undo: true });
     })();
+  }
+  function takeFromAddress() {
+    if (!location.hash.startsWith("#add=")) return;
+    let payload = null;
+    try { payload = JSON.parse(decodeURIComponent(location.hash.slice(5))); } catch { /* broken link: ignore */ }
+    history.replaceState(null, "", location.pathname + location.search);
+    if (Array.isArray(payload?.items)) receive(payload.items);
+  }
+  window.addEventListener("hashchange", takeFromAddress);
+  // Wait until every script (the word list too) has loaded.
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", takeFromAddress); else takeFromAddress();
+  window.addEventListener("message", (e) => {
+    if (e.source !== window || e.data?.source !== "se-ext" || !Array.isArray(e.data.items)) return;
+    receive(e.data.items);
   });
   window.postMessage({ source: "se-app", type: "ready" }, location.origin);
 

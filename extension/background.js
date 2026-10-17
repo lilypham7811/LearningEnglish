@@ -1,5 +1,5 @@
 // Right-click "Save to LearningEnglish": captures the page (YouTube video or news article)
-// and hands it to the online app (https://lilypham7811.github.io/LearningEnglish/) through app-bridge.js.
+// and hands it to the online app (https://lilypham7811.github.io/LearningEnglish/) by opening it with #add=….
 // Only the online app: it is the one on every device and the one that syncs with the phone.
 const APP = "https://lilypham7811.github.io/LearningEnglish/";
 const APP_URLS = [APP + "*"];
@@ -74,15 +74,22 @@ async function save(tab, linkUrl, selection) {
 }
 
 async function queue(item, tab) {
-  const { queue = [] } = await chrome.storage.local.get("queue");
-  queue.push(item);
-  await chrome.storage.local.set({ queue });
   if (tab?.id) {
     chrome.action.setBadgeBackgroundColor({ color: "#2D6A4D", tabId: tab.id });
     chrome.action.setBadgeText({ text: "✓", tabId: tab.id });
     setTimeout(() => chrome.action.setBadgeText({ text: "", tabId: tab.id }), 2500);
   }
-  await deliver();
+  await deliver([item]);
+}
+
+// Open the online app with the saved items in the address (#add=…). The app reads them and saves them.
+// No script inside the app tab is needed, so it works even if the app tab was open before an update.
+async function deliver(items) {
+  const url = APP + "#add=" + encodeURIComponent(JSON.stringify({ at: Date.now(), items }));
+  const [tab] = await chrome.tabs.query({ url: APP_URLS });
+  if (!tab) { await chrome.tabs.create({ url }); return; }
+  await chrome.tabs.update(tab.id, { url, active: true });
+  await chrome.windows.update(tab.windowId, { focused: true });
 }
 
 async function capture(tab) {
@@ -93,7 +100,6 @@ async function capture(tab) {
     return { url: tab.url, title: tab.title }; // pages the extension can't read (e.g. browser pages)
   }
 }
-
 // Runs inside the saved page.
 function grabPage() {
   const meta = (p) => document.querySelector(`meta[property="${p}"], meta[name="${p}"]`)?.content || "";
@@ -116,22 +122,3 @@ function grabPage() {
     text: text.slice(0, 40000),
   };
 }
-
-// Bring the app forward and ask its bridge to pick up the queue (a newly opened app picks it up on load).
-async function deliver() {
-  const [tab] = await chrome.tabs.query({ url: APP_URLS });
-  if (!tab) { await chrome.tabs.create({ url: APP }); return; }
-  await chrome.tabs.update(tab.id, { active: true });
-  await chrome.windows.update(tab.windowId, { focused: true });
-  try { await chrome.tabs.sendMessage(tab.id, { type: "flush" }); }
-  catch { await chrome.tabs.reload(tab.id); }
-}
-
-chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
-  if (msg?.type !== "take-queue") return;
-  chrome.storage.local.get("queue").then(async ({ queue = [] }) => {
-    await chrome.storage.local.set({ queue: [] });
-    sendResponse(queue);
-  });
-  return true; // async response
-});
