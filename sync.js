@@ -169,7 +169,29 @@
     el.querySelector("span").textContent = text;
     $("syncStatus").textContent = mode === "error" ? "⚠ " + msg : text;
     $("syncStatus").className = "hint small" + (mode === "error" ? " sync-err" : "");
+    const o = SE.safeGet("syncOwner");
+    $("syncInfo").innerHTML = mode === "ok" && o
+      ? `✓ Đang đồng bộ với kho riêng tư <b>${SE.esc(o)}/${REPO}</b> · <a href="https://github.com/${encodeURIComponent(o)}/${REPO}/commits" target="_blank" rel="noopener">Lịch sử sao lưu ↗</a> · <button type="button" class="linkish" data-disconnect>Ngắt kết nối</button>`
+      : "";
+    storageInfo();
   }
+
+  // ---------- Storage on this device ----------
+  // Ask the browser to keep the data (not clear it when the device is low on space), and show how full it is.
+  // Everything lives in localStorage (about 5 MB per site); the GitHub copy is the backup, with full history.
+  async function storageInfo() {
+    let bytes = 0;
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k.startsWith("se_")) bytes += (k.length + (localStorage.getItem(k) || "").length) * 2;
+    }
+    const mb = bytes / 1048576;
+    const kept = await navigator.storage?.persisted?.().catch(() => false);
+    $("storageInfo").innerHTML = `💾 Dữ liệu trên máy này: <b>${mb < 0.1 ? "<0.1" : mb.toFixed(1)} MB</b> / khoảng 5 MB` +
+      (mb > 4 ? ` <span class="sync-err">· Sắp đầy: hãy xoá bớt bài báo/video cũ không dùng.</span>` : "") +
+      (kept ? " · 🔒 Được giữ lâu dài" : "");
+  }
+  navigator.storage?.persist?.().catch(() => {});
 
   // ---------- Moving data from http://localhost:8000 to the online app ----------
   function migrationBanner() {
@@ -218,14 +240,25 @@
   // ---------- Wire up ----------
   window.SE_SYNC = { collect, merge, dirty, syncNow };
   $("syncToken").value = token();
-  $("syncNowBtn").onclick = () => {
-    SE.rawSet("syncToken", $("syncToken").value.trim());
+  // A pasted token is checked right away: shape first, then GitHub (who it belongs to, access to the repo).
+  function useToken(v) {
+    v = v.replace(/\s+/g, "");
+    if (v && !/^(github_pat_|ghp_)[A-Za-z0-9_]{20,}$/.test(v)) {
+      setStatus("error", "Mã không đúng dạng. Mã GitHub bắt đầu bằng github_pat_… Hãy chép lại cả mã.");
+      return;
+    }
+    $("syncToken").value = v;
+    SE.rawSet("syncToken", v);
     SE.rawSet("syncOwner", null);
-    syncNow();
-  };
-  $("settings").addEventListener("close", () => {
-    const v = $("syncToken").value.trim();
-    if (v !== token()) { SE.rawSet("syncToken", v); SE.rawSet("syncOwner", null); syncNow(); }
+    if (v) syncNow(); else setStatus("off");
+  }
+  $("syncNowBtn").onclick = () => useToken($("syncToken").value);
+  $("syncToken").addEventListener("change", () => useToken($("syncToken").value));
+  $("settings").addEventListener("close", () => { if ($("syncToken").value.replace(/\s+/g, "") !== token()) useToken($("syncToken").value); });
+  $("syncInfo").addEventListener("click", (e) => {
+    if (!e.target.closest("[data-disconnect]")) return;
+    if (!confirm("Ngắt đồng bộ trên máy này? Dữ liệu trên máy và bản sao lưu trên GitHub vẫn giữ nguyên.")) return;
+    useToken("");
   });
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "visible") syncNow();      // phone app reopened: get the latest
