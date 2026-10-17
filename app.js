@@ -1539,4 +1539,25 @@ Name2: English sentence | Vietnamese translation`;
   init();
   // Installed app: works offline after the first visit (needs https or localhost).
   if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
+
+  // Stay up to date: an app installed on the phone is only resumed, never reloaded, when reopened.
+  // Each time the app comes back to the screen (and every 30 min), ask the server for the current version
+  // (the ?v= number of app.js) and reload when it is newer. The version is shown in the rail.
+  const APP_VERSION = +((document.querySelector('script[src*="app.js"]')?.src.match(/[?&]v=(\d+)/) || [])[1] || 0);
+  $("appVersion").textContent = "Phiên bản " + APP_VERSION;
+  async function checkForUpdate() {
+    if (state.recording || state.rp || window.SE_LIVE?.active || window.SE_BUSY) return; // don't interrupt practice
+    try {
+      const html = await (await fetch(location.pathname + "?check=" + Date.now(), { cache: "no-store" })).text();
+      const latest = +((html.match(/app\.js\?v=(\d+)/) || [])[1] || 0);
+      if (latest > APP_VERSION) {
+        $("appVersion").textContent = `Đang cập nhật lên phiên bản ${latest}…`;
+        (await navigator.serviceWorker?.getRegistration())?.update().catch(() => {});
+        setTimeout(() => location.reload(), 600);
+      }
+    } catch { /* offline: try again later */ }
+  }
+  document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") checkForUpdate(); });
+  setInterval(checkForUpdate, 30 * 60000);
+  setTimeout(checkForUpdate, 3000);
 })();
