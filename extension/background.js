@@ -1,4 +1,4 @@
-// Right-click "Save to LearningEnglish": captures the page (YouTube video or news article)
+// Right-click "Save to LearningEnglish" (the only way to save): captures the page (YouTube video or news article)
 // and hands it to the online app (https://lilypham7811.github.io/LearningEnglish/) by opening it with #add=….
 // Only the online app: it is the one on every device and the one that syncs with the phone.
 const APP = "https://lilypham7811.github.io/LearningEnglish/";
@@ -48,7 +48,14 @@ function grabWord() {
   return { context, url: location.href, time: v ? v.currentTime : null,
     title: (document.querySelector("h1.ytd-watch-metadata")?.textContent || document.title.replace(/ - YouTube$/, "")).trim() };
 }
-chrome.action.onClicked.addListener((tab) => save(tab, null, null));
+// Saving happens ONLY from the right-click menu. The toolbar icon just opens the app, and there is no
+// keyboard shortcut: Alt+Shift (switching Vietnamese / English keyboard) + S (Telex tone mark) used to
+// trigger the old Alt+Shift+S shortcut and save pages by accident.
+chrome.action.onClicked.addListener(async () => {
+  const [tab] = await chrome.tabs.query({ url: APP_URLS });
+  if (tab) { await chrome.tabs.update(tab.id, { active: true }); await chrome.windows.update(tab.windowId, { focused: true }); }
+  else await chrome.tabs.create({ url: APP });
+});
 
 // Pages that are never a news article or video: the app itself, browser pages and new-tab pages
 // (including new-tab pages replaced by other extensions or sites).

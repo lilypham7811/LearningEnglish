@@ -541,45 +541,6 @@
     if (kind === "speech") renderToday();
   }
 
-  // "⭐ Lưu vào LearningEnglish" bookmark (bookmarklet): works on YouTube and news sites in any browser,
-  // nothing to install or update. It opens the online app with the item in the address (#add=…).
-  function bookmarklet() {
-    var APP = "https://lilypham7811.github.io/LearningEnglish/";
-    if (/(^|\.)(claude\.ai|chatgpt\.com|chat\.openai\.com|gemini\.google\.com|aistudio\.google\.com|copilot\.microsoft\.com|perplexity\.ai|mail\.google\.com|outlook\.(live|office)\.com|mail\.yahoo\.com|messenger\.com|web\.whatsapp\.com|chat\.zalo\.me|zalo\.me|web\.telegram\.org|discord\.com|docs\.google\.com|drive\.google\.com|accounts\.google\.com|myaccount\.google\.com|onedrive\.live\.com|icloud\.com|notion\.so)$/i.test(location.hostname)) {
-      alert("Shadow English không lưu trang riêng tư (trò chuyện AI, thư, tin nhắn, tài liệu).");
-      return;
-    }
-    if (location.href.indexOf(APP) === 0 || location.hostname === "localhost") {
-      alert("Kéo nút này lên thanh dấu trang. Sau đó bấm nó khi đang xem video YouTube hoặc đọc bài báo.");
-      return;
-    }
-    var sel = String(getSelection()).replace(/\s+/g, " ").trim();
-    var v = document.querySelector("video");
-    var t = v ? Math.floor(v.currentTime) : null;
-    var title = document.title.replace(/^\(\d+\)\s*/, "").replace(/ - YouTube$/, "");
-    var id = (location.href.match(/[?&]v=([\w-]{11})/) || location.href.match(/(?:shorts|embed|youtu\.be)\/([\w-]{11})/) || [])[1];
-    var items;
-    if (sel && sel.split(" ").length <= 5) {
-      var n = getSelection().anchorNode, el = n && (n.nodeType === 3 ? n.parentElement : n), ctx = "";
-      for (; el && el !== document.body; el = el.parentElement) {
-        var tx = (el.innerText || "").replace(/\s+/g, " ").trim();
-        if (tx.length >= 15) { ctx = tx.slice(0, 400); break; }
-      }
-      items = [{ kind: "word", word: sel, context: ctx, sourceKind: id ? "video" : "article", sourceTitle: title,
-        sourceUrl: id ? "https://www.youtube.com/watch?v=" + id + (t != null ? "&t=" + t + "s" : "") : location.href, time: t }];
-    } else if (id) {
-      items = [{ url: "https://www.youtube.com/watch?v=" + id, title: title }];
-    } else {
-      var meta = function (p) { var m = document.querySelector('meta[property="' + p + '"],meta[name="' + p + '"]'); return m ? m.content : ""; };
-      var root = document.querySelector("article") || document.querySelector("main") || document.body;
-      var ps = [].slice.call(root.querySelectorAll("p")).map(function (p) { return p.innerText.trim(); })
-        .filter(function (x) { return x.split(/\s+/).length >= 8; });
-      items = [{ kind: "article", url: location.href, title: meta("og:title") || title, site: meta("og:site_name") || location.hostname.replace(/^www\./, ""),
-        image: meta("og:image"), excerpt: meta("og:description"), text: ps.join("\n\n").slice(0, 20000) }];
-    }
-    window.open(APP + "#add=" + encodeURIComponent(JSON.stringify({ at: Date.now(), items: items })), "shadowenglish");
-  }
-  const BOOKMARKLET = "javascript:" + encodeURIComponent("(" + bookmarklet.toString() + ")()");
 
   // Adding items: one slim command bar per section (like "Tạo hội thoại" in Phần 1).
   function addPanel(kind) {
@@ -614,7 +575,6 @@
       <span class="cmd-ic" aria-hidden="true">${kind === "video" ? "▶️" : "📰"}</span>
       <input class="cmd-input" name="url" type="url" required autocomplete="off" aria-label="${ph}" placeholder="${ph}" />
       <button class="btn primary">Lưu</button>
-      <a class="bm-link bm-small" href="${BOOKMARKLET}" title="Kéo nút này lên thanh dấu trang để lưu video và bài báo bằng một chạm" draggable="true">⭐ Lưu vào LearningEnglish</a>
     </form>`;
   }
 
