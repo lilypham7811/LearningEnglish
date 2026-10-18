@@ -32,7 +32,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&family=Fraunces:opsz,wght@9..144,600;9..144,700&display=swap" />
-  <link rel="stylesheet" href="styles.css?v=18" />
+  <link rel="stylesheet" href="styles.css?v=19" />
 </head>
 <body>
 <div class="shell">
@@ -107,12 +107,14 @@
             <input id="importFile" type="file" accept=".json,application/json" hidden />
           </div>
         </div>
-        <div class="topic-row-wrap">
-          <button class="row-arrow left" id="rowLeft" aria-label="Cuộn trái">‹</button>
-          <div id="chips" class="subnav topic-row" role="tablist"></div>
-          <button class="row-arrow right" id="rowRight" aria-label="Cuộn phải">›</button>
+        <div class="panel dlg-panel">
+          <div class="dlg-tools">
+            <div class="search"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5 14 14"/></svg>
+              <input class="input" type="search" id="dlgSearch" placeholder="Tìm bài: cà phê, airport, phỏng vấn…" autocomplete="off" /></div>
+            <span class="muted small" id="dlgCount"></span>
+          </div>
+          <div class="dlg-scroll"><table class="lib dlg-table" id="dlgTable"></table></div>
         </div>
-        <p id="savedEmpty" class="hint" hidden>Chưa có bài nào của bạn. Bài tạo bằng AI hoặc dán vào sẽ tự lưu ở đây. Bài có sẵn thì bấm ☆ Lưu.</p>
       </div>
 
       <div id="emptyDialog" class="panel empty">
@@ -414,12 +416,12 @@
   </form>
 </dialog>
 
-<script src="dialogs.js?v=18"></script>
-<script src="app.js?v=18"></script>
-<script src="live.js?v=18"></script>
-<script src="library.js?v=18"></script>
-<script src="words.js?v=18"></script>
-<script src="handoff.js?v=18"></script>
-<script src="sync.js?v=18"></script>
+<script src="dialogs.js?v=19"></script>
+<script src="app.js?v=19"></script>
+<script src="live.js?v=19"></script>
+<script src="library.js?v=19"></script>
+<script src="words.js?v=19"></script>
+<script src="handoff.js?v=19"></script>
+<script src="sync.js?v=19"></script>
 </body>
 </html>

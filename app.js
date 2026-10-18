@@ -510,33 +510,71 @@ Name2: English sentence | Vietnamese translation`;
     renderTopics();
   }
 
-  // ---------- Topic row (library + my dialogs), one horizontal line of pills ----------
-  const PILL_COLORS = ["--r1", "--r2", "--r3", "--r4", "--r5", "--r6", "--r7"];
-  const pillColor = (i) => `var(${PILL_COLORS[i % PILL_COLORS.length]})`;
-  const pillInk = (i) => (PILL_COLORS[i % PILL_COLORS.length] === "--r3" ? "var(--r-on-yellow)" : "#fff");
+  // ---------- Dialog list: one table of every dialog (library + mine) ----------
+  // Columns: topic | dialog (click to practise) | date created. Search, filters, sortable columns;
+  // on phones each row becomes a card.
+  const CATEGORY_COLORS = {
+    "Ăn uống": "var(--r1)", "Mua sắm": "var(--r2)", "Du lịch & đi lại": "var(--r5)", "Sức khỏe": "var(--r4)",
+    "Công việc & học tập": "var(--r6)", "Dịch vụ": "var(--turmeric)", "Giao tiếp hằng ngày": "var(--leaf)",
+    "Giải trí & sở thích": "var(--r7)", "Chủ đề khác": "var(--ink-3)",
+  };
+  const catColor = (c) => CATEGORY_COLORS[c] || "var(--ink-3)";
   const LEVEL_SHORT = { Beginner: "A2", Intermediate: "B1", Advanced: "C1" };
   let topicFilter = "all";
+  const tableUi = { q: "", sort: "topic", dir: 1 };
 
+  // My dialogs (AI-written or pasted) get the topic of the closest library dialog.
+  function categoryOf(d) {
+    if (d.category) return d.category;
+    const lib = window.DIALOGS.find((x) => x.id === d.id);
+    if (lib) return lib.category;
+    const { best } = matchLibrary(cleanTopic(d.topic || d.title || ""));
+    return best?.category || "Chủ đề khác";
+  }
+  const createdAt = (d) => d.savedAt || (d.added ? new Date(d.added + "T00:00:00").getTime() : 0);
   function topicList() {
     const mine = getSaved().map((d) => ({ ...d, mine: true }));
     const lib = window.DIALOGS.filter((d) => !mine.some((m) => m.id === d.id));
-    if (topicFilter === "saved") return mine;
-    const all = [...mine, ...lib];
-    return topicFilter === "all" ? all : all.filter((d) => d.level === topicFilter);
+    let all = [...mine, ...lib].map((d) => ({ ...d, cat: categoryOf(d), at: createdAt(d) }));
+    if (topicFilter === "saved") all = all.filter((d) => d.mine);
+    else if (topicFilter !== "all") all = all.filter((d) => d.level === topicFilter);
+    const q = deaccent(tableUi.q.trim());
+    if (q) all = all.filter((d) => deaccent(`${d.cat} ${d.title} ${d.titleVi || ""}`).includes(q));
+    const key = { topic: (d) => deaccent(d.cat) + " " + deaccent(d.titleVi || d.title), title: (d) => deaccent(d.titleVi || d.title), date: (d) => d.at };
+    const k = key[tableUi.sort];
+    return all.sort((a, b) => (k(a) > k(b) ? 1 : k(a) < k(b) ? -1 : 0) * tableUi.dir);
   }
   function renderTopics() {
     const list = topicList();
-    $("chips").innerHTML = list.map((d, i) =>
-      `<button role="tab" data-id="${esc(d.id)}" data-i="${i}" aria-selected="${state.dialog?.id === d.id}" style="--gc:${pillColor(i)};--gfg:${pillInk(i)}" title="${esc(d.title)}">` +
-      `${d.mine ? "★ " : ""}${d.emoji || "💬"} ${esc(d.titleVi || d.title)}<span class="cnt">${LEVEL_SHORT[d.level] || "AI"}</span></button>`).join("");
-    $("savedEmpty").hidden = !(topicFilter === "saved" && !list.length);
+    const arrow = (col) => (tableUi.sort === col ? (tableUi.dir > 0 ? " ▲" : " ▼") : "");
+    const th = (col, label, cls = "") => `<th class="${cls}"><button type="button" class="th-sort" data-sort="${col}" aria-sort="${tableUi.sort === col ? (tableUi.dir > 0 ? "ascending" : "descending") : "none"}">${label}<span class="sort-ic">${arrow(col)}</span></button></th>`;
+    $("dlgTable").innerHTML = `<thead><tr>${th("topic", "Chủ đề", "c-topic")}${th("title", "Đoạn hội thoại", "c-title")}${th("date", "Ngày tạo", "c-date")}</tr></thead><tbody>` +
+      (list.length ? list.map((d) => `<tr data-id="${esc(d.id)}" class="${state.dialog?.id === d.id ? "on" : ""}" tabindex="0">
+        <td class="c-topic" data-label="Chủ đề"><span class="cat" style="--cc:${catColor(d.cat)}"><i></i>${esc(d.cat)}</span></td>
+        <td class="c-title" data-label="Đoạn hội thoại"><div class="dt-main">
+            <span class="dt-emoji">${d.emoji || "💬"}</span>
+            <span class="dt-names"><b>${esc(d.titleVi || d.title)}</b>${d.titleVi ? `<small>${esc(d.title)}</small>` : ""}</span>
+            <span class="dt-tags"><span class="lvl lvl-${(d.level || "").toLowerCase()}" title="${LEVEL_VI[d.level] || ""}">${LEVEL_SHORT[d.level] || "–"}</span>${d.mine ? `<span class="chip ai">★ Của tôi</span>` : ""}</span>
+            <span class="dt-go">Luyện <span aria-hidden="true">→</span></span></div></td>
+        <td class="c-date" data-label="Ngày tạo">${d.at ? new Date(d.at).toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit", year: "numeric" }) : "–"}</td>
+      </tr>`).join("") : `<tr><td colspan="3" class="empty-row">${topicFilter === "saved" ? "Chưa có bài nào của bạn. Bài tạo bằng AI hoặc dán vào sẽ tự lưu ở đây; bài có sẵn thì bấm ☆ Lưu." : "Không tìm thấy bài nào."}</td></tr>`) +
+      "</tbody>";
+    $("dlgCount").textContent = `${list.length} bài`;
   }
   function onTopicClick(e) {
-    const b = e.target.closest("button[data-id]");
-    if (!b) return;
-    const mine = getSaved().find((x) => x.id === b.dataset.id);
-    const d = mine ? copyDialog(mine, mine.source) : copyDialog(window.DIALOGS.find((x) => x.id === b.dataset.id), "Thư viện có sẵn");
-    d.color = pillColor(+b.dataset.i);
+    const s = e.target.closest("button[data-sort]");
+    if (s) {
+      tableUi.dir = tableUi.sort === s.dataset.sort ? -tableUi.dir : s.dataset.sort === "date" ? -1 : 1; // newest first on first click
+      tableUi.sort = s.dataset.sort;
+      return renderTopics();
+    }
+    const row = e.target.closest("tr[data-id]");
+    if (!row) return;
+    const mine = getSaved().find((x) => x.id === row.dataset.id);
+    const src = mine || window.DIALOGS.find((x) => x.id === row.dataset.id);
+    if (!src) return;
+    const d = copyDialog(src, mine ? mine.source : "Thư viện có sẵn");
+    d.color = catColor(categoryOf(src));
     render(d);
   }
 
@@ -655,8 +693,6 @@ Name2: English sentence | Vietnamese translation`;
       ol.appendChild(li);
     });
     $("dialogSection").scrollIntoView({ behavior: "smooth", block: "start" });
-    const pill = $("chips").querySelector('[aria-selected="true"]'); // centre it in the row without scrolling the page
-    if (pill) $("chips").scrollTo({ left: pill.offsetLeft - $("chips").clientWidth / 2 + pill.offsetWidth / 2, behavior: "smooth" });
   }
   // Wrap each word in a span carrying its char offsets, for boundary highlighting.
   function wrapWords(text) {
@@ -1403,17 +1439,16 @@ Name2: English sentence | Vietnamese translation`;
       synth.onvoiceschanged = loadVoices;
     }
 
-    $("chips").onclick = onTopicClick;
+    $("dlgTable").onclick = onTopicClick;
     $("topicFilter").onclick = (e) => {
       const b = e.target.closest("button[data-f]");
       if (!b) return;
       topicFilter = b.dataset.f;
       $("topicFilter").querySelectorAll("button").forEach((x) => x.setAttribute("aria-pressed", x === b));
       renderTopics();
-      $("chips").scrollTo({ left: 0 });
     };
-    $("rowLeft").onclick = () => $("chips").scrollBy({ left: -$("chips").clientWidth * 0.8 });
-    $("rowRight").onclick = () => $("chips").scrollBy({ left: $("chips").clientWidth * 0.8 });
+    $("dlgSearch").oninput = (e) => { tableUi.q = e.target.value; renderTopics(); };
+    $("dlgTable").addEventListener("keydown", (e) => { if (e.key === "Enter" && e.target.matches("tr[data-id]")) onTopicClick(e); });
     $("navTalk").textContent = `${window.DIALOGS.length} chủ đề có sẵn`;
     document.querySelector(".nav").onclick = (e) => {
       const b = e.target.closest("button[data-view]");

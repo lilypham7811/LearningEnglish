@@ -3,7 +3,7 @@
 // Add your own topics by copying one of these objects.
 window.DIALOGS = [
   {
-    id: "restaurant", emoji: "🍽️", title: "Ordering at a Restaurant", titleVi: "Gọi món ở nhà hàng", level: "Beginner",
+    id: "restaurant", category: "Ăn uống", added: "2026-10-06", emoji: "🍽️", title: "Ordering at a Restaurant", titleVi: "Gọi món ở nhà hàng", level: "Beginner",
     keywords: ["restaurant", "food", "order", "dinner", "lunch", "eat", "eating", "waiter", "menu", "meal"],
     viKeywords: ["nha hang", "goi mon", "an toi", "an trua", "boi ban", "thuc don", "an uong", "quan an", "dat ban"],
     speakers: ["Waiter", "Customer"],
@@ -25,7 +25,7 @@ window.DIALOGS = [
     ],
   },
   {
-    id: "coffee", emoji: "☕", title: "At the Coffee Shop", titleVi: "Ở quán cà phê", level: "Beginner",
+    id: "coffee", category: "Ăn uống", added: "2026-10-06", emoji: "☕", title: "At the Coffee Shop", titleVi: "Ở quán cà phê", level: "Beginner",
     keywords: ["coffee", "cafe", "café", "latte", "tea", "barista", "drink", "cappuccino", "starbucks"],
     viKeywords: ["ca phe", "cafe", "quan nuoc", "tra sua", "do uong", "goi nuoc", "goi do uong"],
     speakers: ["Barista", "Customer"],
@@ -45,7 +45,7 @@ window.DIALOGS = [
     ],
   },
   {
-    id: "airport", emoji: "✈️", title: "Checking In at the Airport", titleVi: "Làm thủ tục ở sân bay", level: "Intermediate",
+    id: "airport", category: "Du lịch & đi lại", added: "2026-10-06", emoji: "✈️", title: "Checking In at the Airport", titleVi: "Làm thủ tục ở sân bay", level: "Intermediate",
     keywords: ["airport", "flight", "fly", "plane", "check", "boarding", "luggage", "baggage", "passport", "airline"],
     viKeywords: ["san bay", "may bay", "chuyen bay", "hanh ly", "lam thu tuc", "check in", "ho chieu", "di may bay"],
     speakers: ["Agent", "Passenger"],
@@ -66,7 +66,7 @@ window.DIALOGS = [
     ],
   },
   {
-    id: "hotel", emoji: "🏨", title: "Hotel Check-in", titleVi: "Nhận phòng khách sạn", level: "Beginner",
+    id: "hotel", category: "Du lịch & đi lại", added: "2026-10-06", emoji: "🏨", title: "Hotel Check-in", titleVi: "Nhận phòng khách sạn", level: "Beginner",
     keywords: ["hotel", "room", "reservation", "booking", "stay", "reception", "check-in", "accommodation"],
     viKeywords: ["khach san", "nhan phong", "dat phong", "tra phong", "le tan"],
     speakers: ["Receptionist", "Guest"],
@@ -85,7 +85,7 @@ window.DIALOGS = [
     ],
   },
   {
-    id: "doctor", emoji: "🩺", title: "Visiting the Doctor", titleVi: "Đi khám bác sĩ", level: "Intermediate",
+    id: "doctor", category: "Sức khỏe", added: "2026-10-06", emoji: "🩺", title: "Visiting the Doctor", titleVi: "Đi khám bác sĩ", level: "Intermediate",
     keywords: ["doctor", "sick", "health", "hospital", "clinic", "ill", "pain", "medicine", "appointment", "fever", "cold"],
     viKeywords: ["bac si", "kham benh", "di kham", "benh vien", "phong kham", "bi om", "bi benh", "dau hong", "bi sot", "uong thuoc"],
     speakers: ["Doctor", "Patient"],
@@ -106,7 +106,7 @@ window.DIALOGS = [
     ],
   },
   {
-    id: "interview", emoji: "💼", title: "Job Interview", titleVi: "Phỏng vấn xin việc", level: "Advanced",
+    id: "interview", category: "Công việc & học tập", added: "2026-10-06", emoji: "💼", title: "Job Interview", titleVi: "Phỏng vấn xin việc", level: "Advanced",
     keywords: ["job", "interview", "work", "career", "hire", "hiring", "employment", "resume", "position", "office"],
     viKeywords: ["phong van", "xin viec", "cong viec", "tuyen dung", "viec lam", "di lam"],
     speakers: ["Interviewer", "Candidate"],
@@ -128,7 +128,7 @@ window.DIALOGS = [
     ],
   },
   {
-    id: "shopping", emoji: "🛍️", title: "Shopping for Clothes", titleVi: "Mua quần áo", level: "Beginner",
+    id: "shopping", category: "Mua sắm", added: "2026-10-06", emoji: "🛍️", title: "Shopping for Clothes", titleVi: "Mua quần áo", level: "Beginner",
     keywords: ["shopping", "shop", "clothes", "buy", "store", "mall", "shirt", "size", "dress", "shoes", "fashion"],
     viKeywords: ["mua sam", "mua quan ao", "quan ao", "mua do", "cua hang", "trung tam thuong mai", "mua ao"],
     speakers: ["Assistant", "Shopper"],
@@ -148,7 +148,7 @@ window.DIALOGS = [
     ],
   },
   {
-    id: "directions", emoji: "🗺️", title: "Asking for Directions", titleVi: "Hỏi đường", level: "Beginner",
+    id: "directions", category: "Du lịch & đi lại", added: "2026-10-06", emoji: "🗺️", title: "Asking for Directions", titleVi: "Hỏi đường", level: "Beginner",
     keywords: ["directions", "direction", "lost", "street", "map", "station"],
     viKeywords: ["hoi duong", "chi duong", "bi lac", "lac duong", "tim duong"],
     speakers: ["Tourist", "Local"],
@@ -168,7 +168,7 @@ window.DIALOGS = [
     ],
   },
   {
-    id: "weather", emoji: "🌦️", title: "Small Talk About the Weather", titleVi: "Nói chuyện phiếm về thời tiết", level: "Beginner",
+    id: "weather", category: "Giao tiếp hằng ngày", added: "2026-10-06", emoji: "🌦️", title: "Small Talk About the Weather", titleVi: "Nói chuyện phiếm về thời tiết", level: "Beginner",
     keywords: ["weather", "rain", "sunny", "hot", "season", "snow", "temperature", "summer", "winter"],
     viKeywords: ["thoi tiet", "troi mua", "troi lanh", "troi nong", "mua dong", "mua he", "noi chuyen phiem"],
     speakers: ["Emma", "Jack"],
@@ -186,7 +186,7 @@ window.DIALOGS = [
     ],
   },
   {
-    id: "phone", emoji: "📞", title: "Making a Phone Appointment", titleVi: "Gọi điện đặt lịch hẹn", level: "Intermediate",
+    id: "phone", category: "Dịch vụ", added: "2026-10-06", emoji: "📞", title: "Making a Phone Appointment", titleVi: "Gọi điện đặt lịch hẹn", level: "Intermediate",
     keywords: ["phone", "call", "appointment", "schedule", "booking", "dentist", "haircut", "telephone", "reschedule"],
     viKeywords: ["goi dien", "dien thoai", "dat lich", "lich hen", "nha khoa", "nha si", "kham rang"],
     speakers: ["Receptionist", "Caller"],
@@ -206,7 +206,7 @@ window.DIALOGS = [
     ],
   },
   {
-    id: "hobbies", emoji: "🎨", title: "Talking About Hobbies", titleVi: "Nói về sở thích", level: "Beginner",
+    id: "hobbies", category: "Giải trí & sở thích", added: "2026-10-06", emoji: "🎨", title: "Talking About Hobbies", titleVi: "Nói về sở thích", level: "Beginner",
     keywords: ["hobby", "hobbies", "weekend", "interests", "music", "sports", "reading", "games"],
     viKeywords: ["so thich", "thoi gian ranh", "luc ranh", "cuoi tuan", "giai tri"],
     speakers: ["Lily", "Tom"],
@@ -224,7 +224,7 @@ window.DIALOGS = [
     ],
   },
   {
-    id: "apartment", emoji: "🏠", title: "Renting an Apartment", titleVi: "Thuê căn hộ", level: "Intermediate",
+    id: "apartment", category: "Dịch vụ", added: "2026-10-06", emoji: "🏠", title: "Renting an Apartment", titleVi: "Thuê căn hộ", level: "Intermediate",
     keywords: ["apartment", "rent", "renting", "house", "flat", "landlord", "move", "moving", "home", "lease"],
     viKeywords: ["thue nha", "thue phong", "can ho", "chu nha", "chuyen nha", "nha tro", "phong tro"],
     speakers: ["Landlord", "Tenant"],
@@ -245,7 +245,7 @@ window.DIALOGS = [
     ],
   },
   {
-    id: "supermarket", emoji: "🛒", title: "At the Supermarket", titleVi: "Ở siêu thị", level: "Beginner",
+    id: "supermarket", category: "Mua sắm", added: "2026-10-06", emoji: "🛒", title: "At the Supermarket", titleVi: "Ở siêu thị", level: "Beginner",
     keywords: ["supermarket", "grocery", "groceries", "market", "vegetables", "fruit", "checkout", "cashier"],
     viKeywords: ["sieu thi", "di cho", "di sieu thi", "thuc pham", "thu ngan", "tinh tien", "mua rau"],
     speakers: ["Cashier", "Customer"],
@@ -264,7 +264,7 @@ window.DIALOGS = [
     ],
   },
   {
-    id: "gym", emoji: "🏋️", title: "Joining a Gym", titleVi: "Đăng ký phòng gym", level: "Intermediate",
+    id: "gym", category: "Sức khỏe", added: "2026-10-06", emoji: "🏋️", title: "Joining a Gym", titleVi: "Đăng ký phòng gym", level: "Intermediate",
     keywords: ["gym", "exercise", "fitness", "workout", "sport", "training", "healthy", "running", "membership"],
     viKeywords: ["phong gym", "tap gym", "the duc", "tap the duc", "tap luyen", "the thao"],
     speakers: ["Trainer", "Member"],
@@ -283,7 +283,7 @@ window.DIALOGS = [
     ],
   },
   {
-    id: "travel", emoji: "🧳", title: "Planning a Holiday", titleVi: "Lên kế hoạch du lịch", level: "Intermediate",
+    id: "travel", category: "Du lịch & đi lại", added: "2026-10-06", emoji: "🧳", title: "Planning a Holiday", titleVi: "Lên kế hoạch du lịch", level: "Intermediate",
     keywords: ["travel", "holiday", "vacation", "trip", "tourism", "beach", "journey", "abroad"],
     viKeywords: ["du lich", "ky nghi", "nghi he", "di choi", "chuyen di", "nghi le"],
     speakers: ["Sophie", "Ben"],
@@ -302,7 +302,7 @@ window.DIALOGS = [
     ],
   },
   {
-    id: "tech", emoji: "💻", title: "Calling Tech Support", titleVi: "Gọi hỗ trợ kỹ thuật", level: "Advanced",
+    id: "tech", category: "Dịch vụ", added: "2026-10-06", emoji: "💻", title: "Calling Tech Support", titleVi: "Gọi hỗ trợ kỹ thuật", level: "Advanced",
     keywords: ["computer", "tech", "technology", "support", "internet", "wifi", "laptop", "broken", "software", "router"],
     viKeywords: ["may tinh", "mat mang", "rot mang", "mang internet", "ho tro ky thuat", "sua may", "loi mang"],
     speakers: ["Support", "Customer"],
@@ -322,7 +322,7 @@ window.DIALOGS = [
     ],
   },
   {
-    id: "school", emoji: "🎓", title: "First Day at School", titleVi: "Ngày đầu đi học", level: "Beginner",
+    id: "school", category: "Công việc & học tập", added: "2026-10-06", emoji: "🎓", title: "First Day at School", titleVi: "Ngày đầu đi học", level: "Beginner",
     keywords: ["school", "class", "student", "teacher", "university", "study", "college", "classmate", "homework"],
     viKeywords: ["truong hoc", "di hoc", "lop hoc", "ngay dau", "ban hoc", "giao vien", "dai hoc", "hoc sinh", "sinh vien"],
     speakers: ["Anna", "Leo"],
@@ -341,7 +341,7 @@ window.DIALOGS = [
     ],
   },
   {
-    id: "birthday", emoji: "🎂", title: "Planning a Birthday Party", titleVi: "Lên kế hoạch tiệc sinh nhật", level: "Beginner",
+    id: "birthday", category: "Giải trí & sở thích", added: "2026-10-06", emoji: "🎂", title: "Planning a Birthday Party", titleVi: "Lên kế hoạch tiệc sinh nhật", level: "Beginner",
     keywords: ["birthday", "party", "celebration", "celebrate", "gift", "present", "cake", "invite"],
     viKeywords: ["sinh nhat", "bua tiec", "to chuc tiec", "qua tang", "banh kem", "tiec sinh nhat"],
     speakers: ["Mia", "Noah"],
@@ -361,7 +361,7 @@ window.DIALOGS = [
   },
   // ---------- More Beginner topics ----------
   {
-    id: "introduce", emoji: "👋", title: "Meeting Someone New", titleVi: "Làm quen với người mới", level: "Beginner",
+    id: "introduce", category: "Giao tiếp hằng ngày", added: "2026-10-12", emoji: "👋", title: "Meeting Someone New", titleVi: "Làm quen với người mới", level: "Beginner",
     keywords: ["introduce", "introduction", "meet", "meeting", "name", "hello", "hi", "myself", "new", "friend", "greeting"],
     viKeywords: ["lam quen", "gioi thieu", "gioi thieu ban than", "chao hoi", "ban moi", "gap go"],
     speakers: ["Anna", "Minh"],
@@ -381,7 +381,7 @@ window.DIALOGS = [
     ],
   },
   {
-    id: "taxi", emoji: "🚕", title: "Taking a Taxi", titleVi: "Đi taxi", level: "Beginner",
+    id: "taxi", category: "Du lịch & đi lại", added: "2026-10-12", emoji: "🚕", title: "Taking a Taxi", titleVi: "Đi taxi", level: "Beginner",
     keywords: ["taxi", "cab", "grab", "uber", "ride", "driver", "car"],
     viKeywords: ["taxi", "di taxi", "goi xe", "dat xe", "tai xe", "grab", "di grab"],
     speakers: ["Driver", "Passenger"],
@@ -401,7 +401,7 @@ window.DIALOGS = [
     ],
   },
   {
-    id: "train", emoji: "🚆", title: "Buying a Train Ticket", titleVi: "Mua vé tàu", level: "Beginner",
+    id: "train", category: "Du lịch & đi lại", added: "2026-10-12", emoji: "🚆", title: "Buying a Train Ticket", titleVi: "Mua vé tàu", level: "Beginner",
     keywords: ["train", "ticket", "tickets", "bus", "railway", "platform", "metro", "subway", "transport", "return"],
     viKeywords: ["mua ve", "ve tau", "tau hoa", "ga tau", "xe buyt", "ve xe", "tau dien"],
     speakers: ["Clerk", "Traveler"],
@@ -421,7 +421,7 @@ window.DIALOGS = [
     ],
   },
   {
-    id: "pharmacy", emoji: "💊", title: "At the Pharmacy", titleVi: "Ở hiệu thuốc", level: "Beginner",
+    id: "pharmacy", category: "Sức khỏe", added: "2026-10-12", emoji: "💊", title: "At the Pharmacy", titleVi: "Ở hiệu thuốc", level: "Beginner",
     keywords: ["pharmacy", "pharmacist", "drugstore", "medicine", "headache", "pills", "tablets", "cough", "chemist"],
     viKeywords: ["hieu thuoc", "nha thuoc", "mua thuoc", "dau dau", "bi ho", "thuoc cam"],
     speakers: ["Pharmacist", "Customer"],
@@ -441,7 +441,7 @@ window.DIALOGS = [
     ],
   },
   {
-    id: "family", emoji: "👨‍👩‍👧", title: "Talking About Family", titleVi: "Nói về gia đình", level: "Beginner",
+    id: "family", category: "Giao tiếp hằng ngày", added: "2026-10-12", emoji: "👨‍👩‍👧", title: "Talking About Family", titleVi: "Nói về gia đình", level: "Beginner",
     keywords: ["family", "parents", "mother", "father", "brother", "sister", "siblings", "kids", "children", "relatives"],
     viKeywords: ["gia dinh", "bo me", "anh chi em", "anh trai", "chi gai", "em gai", "em trai", "ho hang"],
     speakers: ["Lan", "Peter"],
@@ -461,7 +461,7 @@ window.DIALOGS = [
     ],
   },
   {
-    id: "routine", emoji: "⏰", title: "My Daily Routine", titleVi: "Thói quen hằng ngày", level: "Beginner",
+    id: "routine", category: "Giao tiếp hằng ngày", added: "2026-10-12", emoji: "⏰", title: "My Daily Routine", titleVi: "Thói quen hằng ngày", level: "Beginner",
     keywords: ["routine", "daily", "day", "morning", "wake", "everyday", "habits", "schedule", "breakfast"],
     viKeywords: ["thoi quen", "hang ngay", "moi ngay", "buoi sang", "thuc day", "mot ngay cua toi", "sinh hoat"],
     speakers: ["Kevin", "Hoa"],
@@ -481,7 +481,7 @@ window.DIALOGS = [
     ],
   },
   {
-    id: "weekend-plans", emoji: "📅", title: "Making Weekend Plans", titleVi: "Hẹn đi chơi cuối tuần", level: "Beginner",
+    id: "weekend-plans", category: "Giải trí & sở thích", added: "2026-10-12", emoji: "📅", title: "Making Weekend Plans", titleVi: "Hẹn đi chơi cuối tuần", level: "Beginner",
     keywords: ["plans", "plan", "invite", "invitation", "free", "hang", "meet", "saturday", "sunday", "outing"],
     viKeywords: ["hen di choi", "ru di choi", "ke hoach cuoi tuan", "hen gap", "di choi cuoi tuan"],
     speakers: ["Linh", "Jake"],
@@ -501,7 +501,7 @@ window.DIALOGS = [
     ],
   },
   {
-    id: "market", emoji: "🧺", title: "Bargaining at the Market", titleVi: "Mặc cả ở chợ", level: "Beginner",
+    id: "market", category: "Mua sắm", added: "2026-10-12", emoji: "🧺", title: "Bargaining at the Market", titleVi: "Mặc cả ở chợ", level: "Beginner",
     keywords: ["market", "bargain", "bargaining", "haggle", "price", "cheap", "expensive", "discount", "souvenir", "seller"],
     viKeywords: ["mac ca", "tra gia", "di cho", "cho", "mua qua", "qua luu niem", "giam gia"],
     speakers: ["Seller", "Buyer"],
@@ -521,7 +521,7 @@ window.DIALOGS = [
     ],
   },
   {
-    id: "cinema", emoji: "🎬", title: "At the Cinema", titleVi: "Ở rạp chiếu phim", level: "Beginner",
+    id: "cinema", category: "Giải trí & sở thích", added: "2026-10-12", emoji: "🎬", title: "At the Cinema", titleVi: "Ở rạp chiếu phim", level: "Beginner",
     keywords: ["cinema", "movie", "movies", "film", "theater", "theatre", "popcorn", "tickets", "seats", "show"],
     viKeywords: ["rap phim", "xem phim", "rap chieu phim", "mua ve xem phim", "bong ngo"],
     speakers: ["Staff", "Customer"],
@@ -541,7 +541,7 @@ window.DIALOGS = [
     ],
   },
   {
-    id: "late", emoji: "⏳", title: "Saying Sorry for Being Late", titleVi: "Xin lỗi vì đến muộn", level: "Beginner",
+    id: "late", category: "Giao tiếp hằng ngày", added: "2026-10-12", emoji: "⏳", title: "Saying Sorry for Being Late", titleVi: "Xin lỗi vì đến muộn", level: "Beginner",
     keywords: ["late", "sorry", "apologize", "apology", "traffic", "waiting", "delay", "excuse"],
     viKeywords: ["xin loi", "den muon", "di muon", "tre hen", "ket xe", "cho doi"],
     speakers: ["Nam", "Sarah"],
@@ -561,7 +561,7 @@ window.DIALOGS = [
     ],
   },
   {
-    id: "favorite-food", emoji: "🍜", title: "Talking About Favorite Food", titleVi: "Nói về món ăn yêu thích", level: "Beginner",
+    id: "favorite-food", category: "Ăn uống", added: "2026-10-12", emoji: "🍜", title: "Talking About Favorite Food", titleVi: "Nói về món ăn yêu thích", level: "Beginner",
     keywords: ["food", "favorite", "favourite", "cook", "cooking", "dish", "pho", "spicy", "vietnamese", "taste"],
     viKeywords: ["mon an", "mon an yeu thich", "nau an", "am thuc", "pho", "do an", "thich an"],
     speakers: ["Emily", "Tuan"],
@@ -581,7 +581,7 @@ window.DIALOGS = [
     ],
   },
   {
-    id: "haircut", emoji: "💇", title: "At the Hair Salon", titleVi: "Ở tiệm cắt tóc", level: "Beginner",
+    id: "haircut", category: "Dịch vụ", added: "2026-10-12", emoji: "💇", title: "At the Hair Salon", titleVi: "Ở tiệm cắt tóc", level: "Beginner",
     keywords: ["hair", "haircut", "salon", "barber", "hairdresser", "trim", "style", "shampoo"],
     viKeywords: ["cat toc", "tiem toc", "tiem cat toc", "lam toc", "goi dau", "uon toc", "nhuom toc"],
     speakers: ["Stylist", "Customer"],
@@ -601,7 +601,7 @@ window.DIALOGS = [
     ],
   },
   {
-    id: "post-office", emoji: "📦", title: "At the Post Office", titleVi: "Ở bưu điện", level: "Beginner",
+    id: "post-office", category: "Dịch vụ", added: "2026-10-12", emoji: "📦", title: "At the Post Office", titleVi: "Ở bưu điện", level: "Beginner",
     keywords: ["post", "office", "package", "parcel", "mail", "send", "letter", "stamp", "shipping", "deliver"],
     viKeywords: ["buu dien", "gui hang", "gui do", "gui buu kien", "gui thu", "chuyen phat"],
     speakers: ["Clerk", "Customer"],
@@ -621,7 +621,7 @@ window.DIALOGS = [
     ],
   },
   {
-    id: "delivery", emoji: "🍕", title: "Ordering Food Delivery", titleVi: "Gọi đồ ăn giao tận nơi", level: "Beginner",
+    id: "delivery", category: "Ăn uống", added: "2026-10-12", emoji: "🍕", title: "Ordering Food Delivery", titleVi: "Gọi đồ ăn giao tận nơi", level: "Beginner",
     keywords: ["pizza", "delivery", "deliver", "takeaway", "takeout", "order", "phone", "address"],
     viKeywords: ["goi do an", "giao do an", "giao hang", "dat do an", "goi pizza", "ship do an"],
     speakers: ["Staff", "Customer"],
