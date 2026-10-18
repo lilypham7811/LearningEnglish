@@ -1588,11 +1588,38 @@ Name2: English sentence | Vietnamese translation`;
       const html = await (await fetch(location.pathname + "?check=" + Date.now(), { cache: "no-store" })).text();
       const latest = +((html.match(/app\.js\?v=(\d+)/) || [])[1] || 0);
       if (latest > APP_VERSION) {
+        // Never loop: reload once for a given version. If the page is still old after that (a stale cache on
+        // the phone), clear the app's caches once and reload; after that, stop and just show a button.
+        const tried = sessionGet("se_updFor");
+        if (tried === String(latest)) {
+          if (sessionGet("se_updHard") === String(latest)) { showUpdateButton(latest); return; }
+          sessionSet("se_updHard", latest);
+          await clearAppCaches();
+        } else {
+          sessionSet("se_updFor", latest);
+          (await navigator.serviceWorker?.getRegistration())?.update().catch(() => {});
+        }
         $("appVersion").textContent = `Đang cập nhật lên phiên bản ${latest}…`;
-        (await navigator.serviceWorker?.getRegistration())?.update().catch(() => {});
         setTimeout(() => location.reload(), 600);
       }
     } catch { /* offline: try again later */ }
+  }
+  function sessionGet(k) { try { return sessionStorage.getItem(k); } catch { return null; } }
+  function sessionSet(k, v) { try { sessionStorage.setItem(k, String(v)); } catch { /* private mode */ } }
+  // Drops the offline copy of the app (service worker + its caches). Saved words, videos etc. are not touched.
+  async function clearAppCaches() {
+    try {
+      for (const r of (await navigator.serviceWorker?.getRegistrations()) || []) await r.unregister();
+      for (const k of (await caches?.keys()) || []) await caches.delete(k);
+    } catch { /* nothing to clear */ }
+  }
+  function showUpdateButton(latest) {
+    $("appVersion").innerHTML = `Có phiên bản ${latest} · <button type="button" class="linkish">Cập nhật</button>`;
+    $("appVersion").querySelector("button").onclick = () => { location.href = location.pathname + "?reset"; };
+  }
+  // Rescue address …/LearningEnglish/?reset : clears the app's offline copy and loads the newest version.
+  if (/[?&]reset\b/.test(location.search)) {
+    clearAppCaches().then(() => location.replace(location.pathname));
   }
   document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") checkForUpdate(); });
   setInterval(checkForUpdate, 30 * 60000);
