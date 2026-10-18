@@ -249,11 +249,11 @@
     const all = list();
     const mastered = all.filter((w) => w.stage >= MASTERED).length;
     root.innerHTML = `<div class="vhead"><div><p class="eyebrow">Phần 6 · Từ vựng</p><h2>Sổ từ vựng</h2></div>
-        <div class="kpis words-kpis">
-          <div class="kpi mini" style="--pc:var(--r5)"><div class="k-label">Tổng số từ</div><div class="k-val">${all.length}</div></div>
-          <div class="kpi mini" style="--pc:var(--r1)"><div class="k-label">Ôn hôm nay</div><div class="k-val">${due().length}</div></div>
-          <div class="kpi mini" style="--pc:var(--r4)"><div class="k-label">Đã thuộc</div><div class="k-val">${mastered}</div></div>
-        </div></div>
+        <dl class="stat-list" aria-label="Thống kê sổ từ vựng">
+          <div style="--pc:var(--r5)"><dt>Tổng số từ</dt><dd>${all.length}</dd></div>
+          <div style="--pc:var(--r1)"><dt>Ôn hôm nay</dt><dd>${due().length}</dd></div>
+          <div style="--pc:var(--r4)"><dt>Đã thuộc</dt><dd>${mastered}</dd></div>
+        </dl></div>
       <div class="panel" id="reviewBox"></div>
       <div class="words-tools">
         <form class="cmdbar" id="wordAdd">
