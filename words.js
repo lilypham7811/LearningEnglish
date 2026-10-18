@@ -248,7 +248,7 @@
     const root = $("view-words");
     const all = list();
     const mastered = all.filter((w) => w.stage >= MASTERED).length;
-    root.innerHTML = `<div class="vhead"><div><p class="eyebrow">Phần 6 · Từ vựng</p><h2>Sổ từ vựng</h2></div>
+    root.innerHTML = `<div class="vhead"><div><p class="eyebrow">Phần 5 · Sổ từ vựng</p><h2>Sổ từ vựng</h2></div>
         <dl class="stat-list" aria-label="Thống kê sổ từ vựng">
           <div style="--pc:var(--r5)"><dt>Tổng số từ</dt><dd>${all.length}</dd></div>
           <div style="--pc:var(--r1)"><dt>Ôn hôm nay</dt><dd>${due().length}</dd></div>

@@ -10,19 +10,19 @@
 
   const KINDS = {
     video: {
-      key: "videos", eyebrow: "Phần 3 · Video tin tức", h2: "Video YouTube đã lưu",
+      key: "videos", eyebrow: "Phần 2 · Video tin tức", h2: "Video YouTube đã lưu",
       hint: "Mở video trên YouTube, bấm chuột phải vào trang → <b>Save to LearningEnglish</b>. Hoặc dán link vào ô dưới.",
       empty: "Chưa có video nào. Lưu một bản tin YouTube để bắt đầu.", unit: "video",
       chips: [["phrases3", "✨ 3 cụm từ hay nhất"], ["vocab", "📚 Từ mới"], ["transcript", "📝 Lời thoại"], ["summary", "📰 Tóm tắt"], ["live", "🎙️ Luyện nói về video"]],
     },
     article: {
-      key: "articles", eyebrow: "Phần 4 · Bài báo", h2: "Bài báo để đọc",
+      key: "articles", eyebrow: "Phần 3 · Bài báo", h2: "Bài báo để đọc",
       hint: "Mở bài báo, bấm chuột phải → <b>Save to LearningEnglish</b> (tự lưu cả nội dung). Hoặc dán link vào ô dưới.",
       empty: "Chưa có bài báo nào. Lưu một bài tin tức tiếng Anh để bắt đầu.", unit: "bài",
       chips: [["phrases5", "✨ 3–5 câu hay nhất để luyện"], ["vocab", "📚 Từ mới"], ["summary", "📰 Tóm tắt dễ hiểu"], ["live", "🎙️ Luyện nói về bài này"]],
     },
     speech: {
-      key: "speeches", eyebrow: "Phần 5 · Phát biểu", h2: "Trở thành người nói hay nhất",
+      key: "speeches", eyebrow: "Phần 4 · Phát biểu", h2: "Trở thành người nói hay nhất",
       hint: "Dán bài phát biểu, hoặc nhờ Google AI viết. Mỗi ngày: đọc chạy chữ, ghi âm, nghe AI nhận xét, rồi nói lại hay hơn.",
       empty: "Chưa có bài phát biểu nào. Dán một bài hoặc nhờ AI viết bài đầu tiên.", unit: "bài",
       chips: [["critique", "🎯 Góp ý bài viết"], ["phrases5", "✨ Cụm từ đắt giá"], ["delivery", "🗣️ Cách nói bài này"], ["live", "🎤 Tập trả lời khán giả"]],
