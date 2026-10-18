@@ -62,18 +62,20 @@
   // Meanings. With a Google AI key: Google AI reads the word's Oxford Learner's Dictionaries page
   // (the site can't be read from the browser directly) and returns Oxford's part of speech, IPA, definition
   // and examples, plus the Vietnamese meaning. Without a key: a free dictionary, and the Oxford link.
-  async function lookup(id, { force = false } = {}) {
+  // keepWord: the learner edited the word by hand, so don't change it to its base form.
+  async function lookup(id, { force = false, keepWord = false } = {}) {
     const it = list().find((x) => x.id === id);
-    if (!it || (it.dictSource === "oxford" && !force)) return;
+    if (!it || (it.dictSource === "oxford" && !force && it.lemmaChecked)) return;
     let patch = null;
     try {
       if (SE.geminiKey() && window.SE_LIB) patch = await oxfordViaAi(it);
     } catch { /* fall back to the free sources */ }
     if (!patch) {
-      // No key: Google's dictionary (Vietnamese meanings + Oxford Languages definitions and examples),
-      // topped up with IPA and extra examples from the free English dictionary.
-      const [g, f, t] = await Promise.all([googleDict(it.word).catch(() => null), freeDictionary(it.word.toLowerCase()).catch(() => null),
-        tatoeba(it.word).catch(() => [])]);
+      // No key: Google's dictionary (Vietnamese meanings, Oxford Languages definitions and examples, base form),
+      // topped up with IPA from the free English dictionary and everyday examples from Tatoeba.
+      const g = await googleDict(it.word).catch(() => null);
+      const base = keepWord ? it.word : (g?.base || it.word);
+      const [f, t] = await Promise.all([freeDictionary(base.toLowerCase()).catch(() => null), tatoeba(base).catch(() => [])]);
       if (g || f) {
         // Examples: one from Oxford first, then everyday sentences from Tatoeba, then the rest of Oxford's.
         // The other free dictionary's examples are left out: they are often old quotes and headlines.
@@ -83,12 +85,44 @@
           .filter((x, i, a) => a.findIndex((y) => y.toLowerCase() === x.toLowerCase()) === i)
           .slice(0, 3);
         patch = {
-          pos: g?.pos || f?.pos || "", ipa: f?.ipa || "", defEn: g?.defEn || f?.defEn || "",
+          lemma: g?.base || "", pos: g?.pos || f?.pos || "", ipa: f?.ipa || "", defEn: g?.defEn || f?.defEn || "",
           meaningVi: g?.meaningVi || "", examples, dictSource: g ? "google" : "free",
         };
       }
     }
-    if (patch) update(id, patch);
+    if (!patch) return;
+    // Save the dictionary form: "discussions" -> "discussion". The form actually seen stays in `form`
+    // (to highlight it in the sentence). If the base word is already in the list, keep that one.
+    const lemma = (patch.lemma || "").trim();
+    delete patch.lemma;
+    patch.lemmaChecked = true;
+    if (!keepWord && lemma && lemma.toLowerCase() !== it.word.toLowerCase() && /^[a-z][a-z' -]*$/i.test(lemma)) {
+      const twin = list().find((x) => x.id !== id && x.word.toLowerCase() === lemma.toLowerCase());
+      if (twin) {
+        saveList(list().filter((x) => x.id !== id));
+        toast(`“${it.word}” là dạng của “${twin.word}”, từ này đã có trong sổ.`);
+        if (!$("view-words").hidden && !ui.review) render();
+        return;
+      }
+      patch.form = it.form || it.word;
+      patch.word = lemma;
+      toast(`Đã lưu ở dạng gốc: “${it.word}” → “${lemma}”`);
+    }
+    update(id, patch);
+  }
+
+  // The learner fixes a word by hand ("discussions" -> "discussion"): new meanings, same sentence and schedule.
+  function editWord(id, value) {
+    const it = list().find((x) => x.id === id);
+    const word = clean(value);
+    if (!it || !word || word === it.word) return false;
+    const twin = list().find((x) => x.id !== id && x.word.toLowerCase() === word.toLowerCase());
+    if (twin) { toast(`“${twin.word}” đã có trong sổ.`); return false; }
+    update(id, { word, form: it.form || it.word, pos: "", ipa: "", defEn: "", meaningVi: "", examples: [], dictSource: null, lemmaChecked: true });
+    tried.add(id);
+    lookup(id, { force: true, keepWord: true });
+    toast(`Đã sửa thành “${word}”, đang tra nghĩa mới…`);
+    return true;
   }
 
   // Tatoeba: a free collection of simple, everyday sentences. Shortest first, 4–14 words, no near-duplicates
@@ -119,6 +153,7 @@
     const tidy = (s) => { s = s.replace(/<[^>]+>/g, "").trim(); s = s[0].toUpperCase() + s.slice(1); return /[.!?]$/.test(s) ? s : s + "."; };
     const firstDef = d.definitions?.[0];
     return {
+      base: (firstDef?.base_form || d.dict?.[0]?.base_form || "").trim(), // "discussions" -> "discussion", "went" -> "go"
       meaningVi: vi.join(", "),
       pos: [...new Set((d.definitions || d.dict || []).map((x) => POS_EN[x.pos] || x.pos))].slice(0, 2).join(", "),
       defEn: firstDef?.entry?.[0]?.gloss ? tidy(firstDef.entry[0].gloss) : "",
@@ -133,7 +168,8 @@
         `(if that page doesn't exist, search https://www.oxfordlearnersdictionaries.com/search/english/?q=${encodeURIComponent(it.word)}).\n` +
         (it.context ? `I met the word in this sentence: "${it.context}". Use the meaning that fits this sentence.\n` : "Use the most common meaning.\n") +
         `Reply with JSON only, no other text:\n` +
-        `{"pos": "part of speech as Oxford writes it (e.g. adjective)", "ipa": "Oxford's British IPA, with slashes", ` +
+        `{"lemma": "the dictionary form (singular noun, base verb), e.g. discussions -> discussion, went -> go", ` +
+        `"pos": "part of speech as Oxford writes it (e.g. adjective)", "ipa": "Oxford's British IPA, with slashes", ` +
         `"defEn": "Oxford's definition, as written on the page", "meaningVi": "short natural Vietnamese meaning", ` +
         `"examples": ["3 of the most common, useful example sentences, Oxford's examples first"]}` }] }],
       tools: [{ urlContext: {} }],
@@ -141,7 +177,7 @@
     const json = JSON.parse(text.replace(/^[\s\S]*?(\{[\s\S]*\})[\s\S]*$/, "$1"));
     if (!json.defEn) return null;
     return {
-      pos: json.pos || "", ipa: json.ipa || "", defEn: json.defEn, meaningVi: json.meaningVi || "",
+      lemma: json.lemma || "", pos: json.pos || "", ipa: json.ipa || "", defEn: json.defEn, meaningVi: json.meaningVi || "",
       examples: (json.examples || []).filter(Boolean).slice(0, 3), dictSource: "oxford",
     };
   }
@@ -293,12 +329,13 @@
     renderList();
     // Words saved while offline (or from the other device) still without a meaning: look them up now.
     // Also upgrades words looked up with the older, weaker dictionary (no Vietnamese meaning).
-    list().filter((w) => (!w.defEn || (!w.meaningVi && w.dictSource !== "oxford")) && !tried.has(w.id)).slice(0, 10)
+    list().filter((w) => (!w.defEn || !w.lemmaChecked || (!w.meaningVi && w.dictSource !== "oxford")) && !tried.has(w.id)).slice(0, 10)
       .forEach((w) => { tried.add(w.id); lookup(w.id, { force: true }); });
   }
   const tried = new Set();
 
   const fmtT = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
+  const mark = (w, sentence) => highlight(sentence, w.form && !sentence.toLowerCase().includes(w.word.toLowerCase()) ? w.form : w.word);
   const highlight = (sentence, word) => {
     const i = sentence.toLowerCase().indexOf(word.toLowerCase());
     return i < 0 ? esc(sentence) : esc(sentence.slice(0, i)) + `<mark>${esc(sentence.slice(i, i + word.length))}</mark>` + esc(sentence.slice(i + word.length));
@@ -323,10 +360,10 @@
     }
     box.innerHTML = `<thead><tr><th>Từ</th><th>Dạng từ · Phiên âm</th><th>Nghe · Nói thử</th><th>Nghĩa (Oxford)</th><th>Nghĩa tiếng Việt</th><th>3 câu ví dụ thông dụng</th></tr></thead><tbody>` +
       items.map((w) => `<tr data-id="${w.id}">
-        <td data-label="Từ"><b class="wc-word">${esc(w.word)}</b>
+        <td data-label="Từ"><b class="wc-word">${esc(w.word)}</b>${w.form && w.form.toLowerCase() !== w.word.toLowerCase() ? `<small class="wc-form" title="Dạng bạn đã gặp">từ “${esc(w.form)}”</small>` : ""}
           <div class="wc-meta">${stageBadge(w)}</div>
           ${w.sourceUrl ? `<a class="wc-src" href="${esc(w.sourceUrl)}" target="_blank" rel="noopener" title="${esc(w.sourceTitle || "")}">${w.sourceKind === "video" ? "▶ " + (w.time != null ? fmtT(w.time) : "video") : "↗ nguồn"}</a>` : ""}
-          <button type="button" class="wc-del" data-a="del" title="Xóa từ" aria-label="Xóa từ">🗑</button></td>
+          <span class="wc-row-acts"><button type="button" class="wc-edit" data-a="edit" title="Sửa từ" aria-label="Sửa từ">✏️</button><button type="button" class="wc-del" data-a="del" title="Xóa từ" aria-label="Xóa từ">🗑</button></span></td>
         <td data-label="Dạng từ · Phiên âm">${w.pos ? `<span class="chip">${esc(w.pos)}</span>` : ""}<div class="wc-ipa">${esc(w.ipa || "")}</div></td>
         <td data-label="Nghe · Nói thử"><div class="wc-acts">
           <button type="button" class="btn small" data-a="say" title="Nghe từ">🔊 Nghe</button>
@@ -336,7 +373,7 @@
           <a class="wc-ox" href="${oxfordUrl(w.word)}" target="_blank" rel="noopener">${w.dictSource === "oxford" ? "Oxford ↗" : "Xem trên Oxford ↗"}</a></td>
         <td data-label="Nghĩa tiếng Việt">${w.meaningVi ? `<div class="wc-mean">${esc(w.meaningVi)}</div>` : `<a class="small" target="_blank" rel="noopener" href="https://translate.google.com/?sl=en&tl=vi&op=translate&text=${encodeURIComponent(w.word)}">🌐 Google Dịch</a>`}</td>
         <td data-label="3 câu ví dụ"><ol class="wc-exs">${[...(w.context ? [{ t: w.context, mine: true }] : []), ...(w.examples || []).map((t) => ({ t }))].slice(0, 3)
-          .map((x, i) => `<li${x.mine ? ' class="mine" title="Câu bạn gặp từ này"' : ""}><button type="button" class="ex-say" data-a="ex" data-i="${i}" aria-label="Nghe câu">🔊</button> ${highlight(x.t, w.word)}</li>`).join("") || '<li class="muted">Đang tìm câu ví dụ…</li>'}</ol></td>
+          .map((x, i) => `<li${x.mine ? ' class="mine" title="Câu bạn gặp từ này"' : ""}><button type="button" class="ex-say" data-a="ex" data-i="${i}" aria-label="Nghe câu">🔊</button> ${mark(w, x.t)}</li>`).join("") || '<li class="muted">Đang tìm câu ví dụ…</li>'}</ol></td>
       </tr>`).join("") + "</tbody>";
     box.onclick = (e) => {
       const b = e.target.closest("[data-a]");
@@ -348,8 +385,19 @@
       if (b.dataset.a === "say") SE.say(w.word);
       else if (b.dataset.a === "ex") SE.say(exs[+b.dataset.i] || w.word);
       else if (b.dataset.a === "speak") sayIt(w, b, row.querySelector(".wc-score"));
+      else if (b.dataset.a === "edit") openEditor(row, w);
       else if (b.dataset.a === "del" && confirm(`Xóa “${w.word}” khỏi Sổ từ vựng?`)) { saveList(list().filter((x) => x.id !== w.id)); render(); }
     };
+  }
+  function openEditor(row, w) {
+    const cell = row.cells[0];
+    cell.innerHTML = `<form class="wc-editor"><input class="input" value="${esc(w.word)}" aria-label="Sửa từ" autocomplete="off" spellcheck="false" />
+      <div class="toolbar"><button class="btn small primary">Lưu</button><button type="button" class="btn small ghost" data-cancel>Huỷ</button></div></form>`;
+    const f = cell.querySelector("form"), inp = f.querySelector("input");
+    inp.focus(); inp.select();
+    f.onsubmit = (e) => { e.preventDefault(); editWord(w.id, inp.value); renderList(); };
+    f.querySelector("[data-cancel]").onclick = () => renderList();
+    inp.onkeydown = (e) => { if (e.key === "Escape") renderList(); };
   }
   async function sayIt(w, btn, out) {
     if (!SE.hasRecognition) return toast("Trình duyệt này không chấm điểm được. Hãy dùng Chrome, Edge hoặc Safari.");
@@ -407,13 +455,14 @@
       return;
     }
     const exs = [...(w.context ? [w.context] : []), ...(w.examples || [])].slice(0, 3);
-    const blank = (s) => esc(s).replace(new RegExp(w.word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "ig"), "_____");
+    const esc_re = (x) => x.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const blank = (txt) => [w.word, w.form].filter(Boolean).reduce((acc, f) => acc.replace(new RegExp(esc_re(f), "ig"), "_____"), esc(txt));
     box.innerHTML = `<div class="panel-body flash">
       <div class="muted small">Còn ${R.queue.length} từ · ${STAGE_NAMES[Math.min(w.stage, STAGE_NAMES.length - 1)]}</div>
       <div class="flash-word">${esc(w.word)} <button type="button" class="btn small" data-say>🔊</button></div>
       ${R.shown ? `<div class="muted">${esc([w.pos, w.ipa].filter(Boolean).join(" · "))}</div>
           ${w.meaningVi ? `<div class="wc-mean">${esc(w.meaningVi)}</div>` : ""}${w.defEn ? `<div class="wc-def">${esc(w.defEn)}</div>` : ""}
-          ${exs.length ? `<ol class="wc-exs">${exs.map((s) => `<li>${highlight(s, w.word)}</li>`).join("")}</ol>` : ""}
+          ${exs.length ? `<ol class="wc-exs">${exs.map((s) => `<li>${mark(w, s)}</li>`).join("")}</ol>` : ""}
           <div class="toolbar flash-acts"><button class="btn" data-again>😕 Chưa nhớ</button><button class="btn primary" data-good>🙂 Nhớ rồi</button></div>`
         : `${exs[0] ? `<div class="wc-ctx">“${blank(exs[0])}”</div>` : ""}
           <div class="hint small">Nhớ nghĩa của từ này không? Thử nói một câu với từ này, rồi bấm Hiện nghĩa.</div>

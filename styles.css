@@ -654,3 +654,15 @@ h2 { font-weight: 800; letter-spacing: -0.02em; }
 .cards.selecting .card.picked .pick { background: var(--bad); border-color: var(--bad); color: #fff; }
 .ai-voice-opts { display: flex; flex-wrap: wrap; gap: .2rem 1rem; align-items: flex-end; padding: .2rem 0 .2rem 1.6rem; }
 .ai-voice-opts label { flex: 1 1 12rem; margin: .3rem 0; }
+
+/* Edit a word (✏️) and show the form that was seen ("từ “discussions”") */
+.wc-row-acts { position: absolute; right: .3rem; bottom: .3rem; display: inline-flex; gap: .1rem; opacity: .35; transition: opacity .12s; }
+.words-table tr:hover .wc-row-acts, .wc-row-acts:focus-within { opacity: 1; }
+.wc-row-acts .wc-del { position: static; opacity: 1; }
+.wc-edit { border: 0; background: none; cursor: pointer; font-size: .85rem; padding: .1rem .2rem; border-radius: .3rem; }
+.wc-edit:hover, .wc-row-acts .wc-del:hover { background: var(--surface-2); }
+.wc-form { display: block; color: var(--ink-3); font-size: .78rem; }
+.wc-editor { display: flex; flex-direction: column; gap: .4rem; }
+.wc-editor .input { font-size: 1.05rem; font-weight: 600; }
+@media (hover: none) { .wc-row-acts { opacity: .8; } }
+@media (max-width: 760px) { .wc-row-acts { top: .8rem; bottom: auto; opacity: .8; } }
