@@ -1415,7 +1415,7 @@ Name2: English sentence | Vietnamese translation`;
         $("aiStatus").textContent = "AI không viết được bài: " + err.message;
       } finally {
         btn.disabled = false;
-        btn.textContent = "✨ Tạo hội thoại";
+        btn.textContent = "Tạo";
       }
     } else {
       $("aiStatus").hidden = false;

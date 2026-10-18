@@ -594,3 +594,29 @@ h2, .brand h1, .panel-head h3, .dialog-head h3, .d-title, .rp-setup h3, .sheet h
 h2 { font-weight: 800; letter-spacing: -0.02em; }
 .panel-head h3, .dialog-head h3, .d-title { font-weight: 700; }
 .reader .reader-text, .prompter-text { font-family: var(--f-body); }
+
+/* Slim command bar: create / add in one line (all sections) */
+.vhead h2 { margin-top: .05rem; }
+.view { gap: 1.1rem; }
+.cmdbar { display: flex; align-items: center; gap: .45rem; padding: .4rem .45rem .4rem .9rem; background: var(--surface); border: 1px solid var(--line); border-radius: .9rem; box-shadow: var(--shadow); flex-wrap: wrap; transition: border-color .15s, box-shadow .15s; }
+.cmdbar:focus-within { border-color: var(--leaf); box-shadow: 0 0 0 3px var(--leaf-soft), var(--shadow); }
+.cmd-ic { font-size: 1.05rem; flex: none; opacity: .85; }
+.cmd-input { flex: 1 1 14rem; min-width: 0; min-height: 2.5rem; border: 0; background: transparent; outline: none; font-size: 1rem; color: var(--ink); padding: 0 .2rem; }
+.cmd-input::placeholder { color: var(--ink-3); }
+.cmd-select { min-height: 2.3rem; border-color: transparent; background: var(--surface-2); font-size: .9rem; }
+.cmd-select:hover { border-color: var(--line); }
+.cmdbar .btn { min-height: 2.4rem; }
+.cmdbar .btn.primary { padding: 0 1.2rem; }
+.cmd-status { flex-basis: 100%; margin: 0; padding: 0 .2rem; font-size: .85rem; color: var(--ink-2); }
+.cmd-status:empty { display: none; }
+.bm-link.bm-small { padding: .45rem .9rem; font-size: .85rem; font-weight: 600; background: var(--leaf-tint); color: var(--leaf); border: 1px dashed var(--leaf); }
+.bm-link.bm-small:hover { background: var(--leaf-soft); }
+.cmdwrap { display: flex; flex-direction: column; gap: .5rem; }
+.cmdpaste { display: flex; flex-direction: column; gap: .5rem; padding: .8rem; background: var(--surface); border: 1px solid var(--line); border-radius: .9rem; }
+@media (max-width: 640px) {
+  .cmdbar { padding: .5rem; }
+  .cmd-input { flex-basis: calc(100% - 2rem); }
+  .cmdbar .btn.primary { flex: 1; }
+  .bm-link.bm-small { display: none; } /* bookmarks bar is a computer feature */
+}
+.cmdbar.addform { flex-direction: row; }

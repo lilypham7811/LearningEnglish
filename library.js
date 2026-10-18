@@ -496,7 +496,7 @@
     const k = KINDS[kind];
     const root = $("view-" + kind);
     if (ui[kind].open && !getItem(kind, ui[kind].open)) ui[kind].open = null;
-    const head = `<div class="vhead"><div><p class="eyebrow">${k.eyebrow}</p><h2>${k.h2}</h2><p class="hint">${k.hint}</p></div>
+    const head = `<div class="vhead"><div><p class="eyebrow">${k.eyebrow}</p><h2>${k.h2}</h2></div>
       ${kind === "speech" ? `<div class="today-box" id="speechToday"></div>` : ""}</div>`;
     if (ui[kind].open) {
       root.innerHTML = head + `<div class="toolbar"><button class="btn" data-back>← Danh sách ${k.unit === "video" ? "video" : "bài"}</button></div><div id="detail-${kind}"></div>`;
@@ -552,58 +552,52 @@
   }
   const BOOKMARKLET = "javascript:" + encodeURIComponent("(" + bookmarklet.toString() + ")()");
 
+  // Adding items: one slim command bar per section (like "Tạo hội thoại" in Phần 1).
   function addPanel(kind) {
-    if (kind === "speech") return `<div class="panel"><div class="panel-head"><h3>Thêm bài phát biểu</h3>
-        <div class="seg" data-tabs><button type="button" data-t="ai" aria-pressed="true">✨ Nhờ AI viết</button><button type="button" data-t="paste" aria-pressed="false">📋 Dán bài</button></div></div>
-      <div class="panel-body">
-        <form class="addform" data-form="ai">
-          <input class="input" name="topic" required placeholder="Chủ đề: vì sao nên học suốt đời, giới thiệu bản thân khi phỏng vấn, chúc mừng đám cưới bạn thân…" />
-          <div class="addrow">
-            <select class="select" name="type">
-              <option value="an inspiring, motivational speech">Truyền cảm hứng</option>
-              <option value="a TED-style talk with a personal story and one big idea">Kiểu TED Talk</option>
-              <option value="a persuasive speech">Thuyết phục</option>
-              <option value="a professional business presentation opening">Thuyết trình công việc</option>
-              <option value="a confident self-introduction">Giới thiệu bản thân</option>
-              <option value="a warm toast for a wedding or celebration">Chúc mừng / nâng ly</option>
-              <option value="a short graduation or award acceptance speech">Tốt nghiệp / nhận giải</option>
-            </select>
-            <select class="select" name="minutes"><option value="1">1 phút</option><option value="2" selected>2 phút</option><option value="3">3 phút</option><option value="5">5 phút</option></select>
-            <select class="select" name="level"><option value="Intermediate">Trung cấp</option><option value="Advanced" selected>Nâng cao</option><option value="Beginner">Cơ bản</option></select>
-            <button class="btn primary">✨ Viết bài</button>
-          </div>
-          <p class="hint small" data-status></p>
-        </form>
-        <form class="addform" data-form="paste" hidden>
-          <input class="input" name="title" placeholder="Tên bài (không bắt buộc)" />
-          <textarea class="input" name="text" rows="7" required placeholder="Dán bài phát biểu tiếng Anh vào đây…"></textarea>
-          <div class="addrow"><button class="btn primary">＋ Lưu bài</button></div>
-        </form>
-      </div></div>`;
-    const ph = kind === "video" ? "Dán link YouTube: https://www.youtube.com/watch?v=…" : "Dán link bài báo: https://…";
-    return `<div class="panel"><div class="panel-body">
-      <form class="addform" data-form="url"><div class="addrow">
-        <input class="input" name="url" type="url" required placeholder="${ph}" />
-        <button class="btn primary">＋ Lưu ${kind === "video" ? "video" : "bài báo"}</button></div>
-
+    if (kind === "speech") return `<div class="cmdwrap">
+      <form class="cmdbar addform" data-form="ai">
+        <span class="cmd-ic" aria-hidden="true">✍️</span>
+        <input class="cmd-input" name="topic" required autocomplete="off" aria-label="Chủ đề bài phát biểu"
+          placeholder="Nhờ AI viết bài phát biểu: vì sao nên học suốt đời, giới thiệu bản thân…" />
+        <select class="select cmd-select" name="type" aria-label="Kiểu bài">
+          <option value="an inspiring, motivational speech">Truyền cảm hứng</option>
+          <option value="a TED-style talk with a personal story and one big idea">Kiểu TED Talk</option>
+          <option value="a persuasive speech">Thuyết phục</option>
+          <option value="a professional business presentation opening">Thuyết trình công việc</option>
+          <option value="a confident self-introduction">Giới thiệu bản thân</option>
+          <option value="a warm toast for a wedding or celebration">Chúc mừng / nâng ly</option>
+          <option value="a short graduation or award acceptance speech">Tốt nghiệp / nhận giải</option>
+        </select>
+        <select class="select cmd-select" name="minutes" aria-label="Độ dài"><option value="1">1 phút</option><option value="2" selected>2 phút</option><option value="3">3 phút</option><option value="5">5 phút</option></select>
+        <select class="select cmd-select" name="level" aria-label="Trình độ"><option value="Intermediate">Trung cấp</option><option value="Advanced" selected>Nâng cao</option><option value="Beginner">Cơ bản</option></select>
+        <button class="btn primary">Viết bài</button>
+        <button type="button" class="btn ghost" data-paste-toggle title="Dán bài phát biểu của bạn">📋 Dán</button>
+        <p class="cmd-status" data-status></p>
       </form>
-      <div class="bm-box">
-        <a class="bm-link" href="${BOOKMARKLET}" title="Kéo lên thanh dấu trang" draggable="true">⭐ Lưu vào LearningEnglish</a>
-
-      </div>
-
-    </div></div>`;
+      <form class="cmdpaste addform" data-form="paste" hidden>
+        <input class="input" name="title" placeholder="Tên bài (không bắt buộc)" />
+        <textarea class="input" name="text" rows="6" required placeholder="Dán bài phát biểu tiếng Anh vào đây…"></textarea>
+        <div class="toolbar"><button class="btn primary">Lưu bài</button><button type="button" class="btn ghost" data-paste-toggle>Huỷ</button></div>
+      </form>
+    </div>`;
+    const ph = kind === "video" ? "Dán link YouTube để lưu video…" : "Dán link bài báo để lưu…";
+    return `<form class="cmdbar addform" data-form="url">
+      <span class="cmd-ic" aria-hidden="true">${kind === "video" ? "▶️" : "📰"}</span>
+      <input class="cmd-input" name="url" type="url" required autocomplete="off" aria-label="${ph}" placeholder="${ph}" />
+      <button class="btn primary">Lưu</button>
+      <a class="bm-link bm-small" href="${BOOKMARKLET}" title="Kéo nút này lên thanh dấu trang để lưu video và bài báo bằng một chạm" draggable="true">⭐ Lưu vào LearningEnglish</a>
+    </form>`;
   }
 
   function wireAdd(kind) {
     const root = $("view-" + kind);
-    const tabs = root.querySelector("[data-tabs]");
-    if (tabs) tabs.onclick = (e) => {
-      const b = e.target.closest("button[data-t]");
-      if (!b) return;
-      tabs.querySelectorAll("button").forEach((x) => x.setAttribute("aria-pressed", x === b));
-      root.querySelectorAll("[data-form]").forEach((f) => { f.hidden = f.dataset.form !== b.dataset.t; });
+    // Speech: "📋 Dán" opens / closes the paste form under the command bar.
+    const pasteForm = root.querySelector('[data-form="paste"]');
+    const togglePaste = (open = pasteForm.hidden) => {
+      pasteForm.hidden = !open;
+      if (open) pasteForm.querySelector("textarea").focus();
     };
+    root.querySelectorAll("[data-paste-toggle]").forEach((b) => { b.onclick = () => togglePaste(); });
     root.querySelectorAll("form.addform").forEach((f) => {
       f.onsubmit = async (e) => {
         e.preventDefault();
@@ -625,7 +619,7 @@
           const st = f.querySelector("[data-status]");
           SE.openAiMode(speechPrompt(fd.get("topic").trim(), fd.get("type"), +fd.get("minutes"), fd.get("level")) +
             "\n\nViết bài bằng tiếng Anh. Dòng đầu là tên bài. Sau bài, thêm 3 mẹo trình bày bằng tiếng Việt.");
-          root.querySelector('[data-t="paste"]').click();
+          togglePaste(true);
           toast("Đã mở Google AI Mode. Viết xong thì chép bài và dán vào ô này.");
           st.textContent = "";
         } else {

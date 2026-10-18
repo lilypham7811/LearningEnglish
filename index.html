@@ -32,7 +32,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&display=swap" />
-  <link rel="stylesheet" href="styles.css?v=20" />
+  <link rel="stylesheet" href="styles.css?v=22" />
 </head>
 <body>
 <div class="shell">
@@ -65,32 +65,24 @@
         <div>
           <p class="eyebrow">Phần 1 · Hội thoại</p>
           <h2>Chọn chủ đề &amp; luyện nói</h2>
-          <p class="hint">Bấm một chủ đề để mở bài. Nghe, nhại theo từng câu, nhập vai, hoặc luyện nói trực tiếp với Google AI.</p>
         </div>
       </div>
 
-      <div class="panel">
-        <div class="panel-head">
-          <h3>Tạo hội thoại mới</h3>
-          <div class="toolbar">
-            <button id="pasteBtn" type="button" class="btn">📋 Dán hội thoại</button>
-          </div>
-        </div>
-        <div class="panel-body">
-          <form id="topicForm" class="create">
-            <input id="topicInput" class="input" type="text" enterkeyhint="go" autocomplete="off"
-                   placeholder="Nhập chủ đề: gọi cà phê, hỏi đường, phỏng vấn xin việc…" />
-            <select id="level" class="select" aria-label="Trình độ">
-              <option value="Beginner">Cơ bản</option>
-              <option value="Intermediate" selected>Trung cấp</option>
-              <option value="Advanced">Nâng cao</option>
-            </select>
-            <button type="submit" class="btn primary">✨ Tạo hội thoại</button>
-          </form>
-          <p id="aiNote" class="hint small"></p>
-          <div id="aiStatus" class="status" hidden></div>
-        </div>
-      </div>
+      <!-- Create a dialog: one slim command bar -->
+      <form id="topicForm" class="cmdbar">
+        <span class="cmd-ic" aria-hidden="true">✨</span>
+        <input id="topicInput" class="cmd-input" type="text" enterkeyhint="go" autocomplete="off" aria-label="Chủ đề hội thoại mới"
+               placeholder="Tạo hội thoại mới: gọi cà phê, hỏi đường, phỏng vấn…" />
+        <select id="level" class="select cmd-select" aria-label="Trình độ">
+          <option value="Beginner">Cơ bản</option>
+          <option value="Intermediate" selected>Trung cấp</option>
+          <option value="Advanced">Nâng cao</option>
+        </select>
+        <button type="submit" class="btn primary">Tạo</button>
+        <button id="pasteBtn" type="button" class="btn ghost" title="Dán hội thoại viết bằng Gemini, ChatGPT, Claude…">📋 Dán</button>
+      </form>
+      <p id="aiNote" hidden></p>
+      <div id="aiStatus" class="status" hidden></div>
 
       <div class="topics">
         <div class="topics-head">
@@ -161,7 +153,6 @@
         <div>
           <p class="eyebrow">Phần 2 · Tiến độ</p>
           <h2>Thời gian luyện tập</h2>
-          <p class="hint">Tự động ghi lại mỗi lần bạn luyện: ngày giờ, chủ đề, bao lâu và luyện những gì.</p>
         </div>
         <div class="seg" id="rangeSeg" role="group" aria-label="Khoảng thời gian">
           <button data-r="7" aria-pressed="true">7 ngày</button>
@@ -416,12 +407,12 @@
   </form>
 </dialog>
 
-<script src="dialogs.js?v=20"></script>
-<script src="app.js?v=20"></script>
-<script src="live.js?v=20"></script>
-<script src="library.js?v=20"></script>
-<script src="words.js?v=20"></script>
-<script src="handoff.js?v=20"></script>
-<script src="sync.js?v=20"></script>
+<script src="dialogs.js?v=22"></script>
+<script src="app.js?v=22"></script>
+<script src="live.js?v=22"></script>
+<script src="library.js?v=22"></script>
+<script src="words.js?v=22"></script>
+<script src="handoff.js?v=22"></script>
+<script src="sync.js?v=22"></script>
 </body>
 </html>
