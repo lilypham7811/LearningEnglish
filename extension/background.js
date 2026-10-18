@@ -56,6 +56,7 @@ function notSavable(tab) {
   const url = tab?.url || "";
   return url.startsWith(APP) || url.startsWith("http://localhost:8000/") ||
     /^(chrome|edge|about|chrome-extension|moz-extension):/.test(url) ||
+    /^https?:\/\/([^/]+\.)?(claude\.ai|chatgpt\.com|chat\.openai\.com|gemini\.google\.com|aistudio\.google\.com|copilot\.microsoft\.com|perplexity\.ai|mail\.google\.com|outlook\.(live|office)\.com|mail\.yahoo\.com|messenger\.com|web\.whatsapp\.com|chat\.zalo\.me|zalo\.me|web\.telegram\.org|discord\.com|docs\.google\.com|drive\.google\.com|accounts\.google\.com|myaccount\.google\.com|onedrive\.live\.com|icloud\.com|notion\.so)(\/|$)/i.test(url) || // private pages: AI chats, mail, messages, documents
     /^(new tab|thẻ mới|trang mới|neuer tab|nouvel onglet)$/i.test((tab?.title || "").trim());
 }
 function refuse(tab) {

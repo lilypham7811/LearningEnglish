@@ -28,7 +28,7 @@
       chips: [["critique", "🎯 Góp ý bài viết"], ["phrases5", "✨ Cụm từ đắt giá"], ["delivery", "🗣️ Cách nói bài này"], ["live", "🎤 Tập trả lời khán giả"]],
     },
   };
-  const ui = { video: { open: null, q: "" }, article: { open: null, q: "" }, speech: { open: null, q: "" } };
+  const ui = { video: { open: null, q: "", sel: null }, article: { open: null, q: "", sel: null }, speech: { open: null, q: "", sel: null } };
 
   // ---------- Storage ----------
   const list = (kind) => SE.safeGet(KINDS[kind].key) || [];
@@ -79,7 +79,21 @@
   const dateVi = (t) => new Date(t).toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit", year: "numeric" });
 
   // Add (or merge) an item coming from the page form or the browser extension.
+  // Private pages are never saved: AI chats, mail, messages, documents, accounts. Saving one by mistake
+  // (bookmark button or extension pressed on claude.ai, …) would copy a private conversation into the app.
+  const PRIVATE_HOSTS = /(^|\.)(claude\.ai|chatgpt\.com|chat\.openai\.com|gemini\.google\.com|aistudio\.google\.com|copilot\.microsoft\.com|perplexity\.ai|mail\.google\.com|outlook\.(live|office)\.com|mail\.yahoo\.com|messenger\.com|web\.whatsapp\.com|chat\.zalo\.me|zalo\.me|web\.telegram\.org|discord\.com|docs\.google\.com|drive\.google\.com|accounts\.google\.com|myaccount\.google\.com|onedrive\.live\.com|icloud\.com|notion\.so|localhost)$/i;
+  function isPrivatePage(url) {
+    try {
+      const u = new URL(url);
+      return PRIVATE_HOSTS.test(u.hostname) || /facebook\.com$/i.test(u.hostname) && /\/messages/.test(u.pathname) || u.hostname === "github.com" && /^\/settings/.test(u.pathname);
+    } catch { return false; }
+  }
+
   async function addItem(raw, { open = false, undo = false } = {}) {
+    if (raw.url && isPrivatePage(raw.url)) {
+      toast(`🔒 Không lưu trang riêng tư (${hostOf(raw.url)}): trang trò chuyện, thư, tin nhắn hay tài liệu không phải bài báo.`);
+      return null;
+    }
     const vid = youtubeId(raw.url || "");
     const kind = raw.kind || (vid ? "video" : "article");
     const items = list(kind);
@@ -506,11 +520,22 @@
       root.innerHTML = head + addPanel(kind) + `
         <div class="lib-tools"><div class="search"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5 14 14"/></svg>
           <input class="input" type="search" placeholder="Tìm theo tên…" value="${esc(ui[kind].q)}" /></div>
-          <span class="muted small" data-count></span></div>
+          <span class="list-acts"><span class="muted small" data-count></span>
+            <button type="button" class="btn ghost small" data-select>Chọn để xóa</button>
+            <button type="button" class="btn small danger-fill" data-del-selected hidden>Xóa 0 bài</button></span></div>
         <div class="cards cards-${kind}"></div>`;
       wireAdd(kind);
       const search = root.querySelector(".search input");
       search.oninput = () => { ui[kind].q = search.value; renderCards(kind); };
+      root.querySelector("[data-select]").onclick = () => { ui[kind].sel = ui[kind].sel ? null : new Set(); renderCards(kind); };
+      root.querySelector("[data-del-selected]").onclick = () => {
+        const sel = ui[kind].sel;
+        if (!sel?.size || !confirm(`Xóa ${sel.size} ${KINDS[kind].unit} đã chọn?`)) return;
+        saveList(kind, list(kind).filter((x) => !sel.has(x.id)));
+        toast(`Đã xóa ${sel.size} ${KINDS[kind].unit}.`);
+        ui[kind].sel = null;
+        renderCards(kind);
+      };
       renderCards(kind);
     }
     if (kind === "speech") renderToday();
@@ -520,6 +545,10 @@
   // nothing to install or update. It opens the online app with the item in the address (#add=…).
   function bookmarklet() {
     var APP = "https://lilypham7811.github.io/LearningEnglish/";
+    if (/(^|\.)(claude\.ai|chatgpt\.com|chat\.openai\.com|gemini\.google\.com|aistudio\.google\.com|copilot\.microsoft\.com|perplexity\.ai|mail\.google\.com|outlook\.(live|office)\.com|mail\.yahoo\.com|messenger\.com|web\.whatsapp\.com|chat\.zalo\.me|zalo\.me|web\.telegram\.org|discord\.com|docs\.google\.com|drive\.google\.com|accounts\.google\.com|myaccount\.google\.com|onedrive\.live\.com|icloud\.com|notion\.so)$/i.test(location.hostname)) {
+      alert("Shadow English không lưu trang riêng tư (trò chuyện AI, thư, tin nhắn, tài liệu).");
+      return;
+    }
     if (location.href.indexOf(APP) === 0 || location.hostname === "localhost") {
       alert("Kéo nút này lên thanh dấu trang. Sau đó bấm nó khi đang xem video YouTube hoặc đọc bài báo.");
       return;
@@ -641,6 +670,15 @@
     });
   }
 
+  function updateSelectBar(kind) {
+    const root = $("view-" + kind);
+    const sel = ui[kind].sel, b = root.querySelector("[data-select]"), del = root.querySelector("[data-del-selected]");
+    if (!b) return;
+    b.textContent = sel ? "Xong" : "Chọn để xóa";
+    del.hidden = !sel;
+    del.disabled = !sel?.size;
+    del.textContent = `Xóa ${sel?.size || 0} ${KINDS[kind].unit}`;
+  }
   function renderCards(kind) {
     const root = $("view-" + kind);
     const box = root.querySelector(".cards");
@@ -650,12 +688,12 @@
     root.querySelector("[data-count]").textContent = `${items.length} ${KINDS[kind].unit}`;
     if (!items.length) { box.innerHTML = `<div class="panel empty"><b>${q ? "Không tìm thấy" : "Danh sách trống"}</b><span>${q ? "Thử từ khóa khác." : KINDS[kind].empty}</span></div>`; return; }
     box.innerHTML = items.map((x) => {
-      if (kind === "video") return `<article class="card" data-id="${x.id}">
+      if (kind === "video") return `<article class="card" data-id="${x.id}"><span class="pick" aria-hidden="true">✓</span>
         <button class="card-open thumb" data-open aria-label="Mở"><img src="${thumb(x.videoId)}" alt="" loading="lazy" /><span class="play-ico">▶</span></button>
         <div class="card-body"><button class="card-title" data-open>${esc(x.title)}</button>
           <div class="card-meta">${esc(x.channel || "YouTube")} · ${dateVi(x.savedAt)}${x.chat?.length ? ` · <span class="chip ai">✨ ${x.chat.filter((m) => m.role === "model").length} trả lời AI</span>` : ""}</div>
           <div class="card-acts"><a class="btn small" href="${esc(x.url)}" target="_blank" rel="noopener" data-link>↗ Mở YouTube</a><button class="btn small primary" data-open>✨ Học với AI</button><button class="btn small ghost danger" data-del title="Xóa">🗑</button></div></div></article>`;
-      if (kind === "article") return `<article class="card" data-id="${x.id}">
+      if (kind === "article") return `<article class="card" data-id="${x.id}"><span class="pick" aria-hidden="true">✓</span>
         ${x.image ? `<button class="card-open thumb" data-open aria-label="Mở"><img src="${esc(x.image)}" alt="" loading="lazy" referrerpolicy="no-referrer" /></button>` : ""}
         <div class="card-body"><span class="chip">${esc(x.site || hostOf(x.url))}</span>
           <button class="card-title" data-open>${esc(x.title)}</button>
@@ -663,16 +701,28 @@
           <div class="card-meta">${dateVi(x.savedAt)}${x.text ? ` · ${words(x.text)} từ` : " · chưa có nội dung"}</div>
           <div class="card-acts"><a class="btn small" href="${esc(x.url)}" target="_blank" rel="noopener" data-link>↗ Bài gốc</a><button class="btn small primary" data-open>📖 Đọc & học</button><button class="btn small ghost danger" data-del title="Xóa">🗑</button></div></div></article>`;
       const n = words(x.text);
-      return `<article class="card" data-id="${x.id}"><div class="card-body">
+      return `<article class="card" data-id="${x.id}"><span class="pick" aria-hidden="true">✓</span><div class="card-body">
         <span class="chip ${x.source === "Google AI" ? "ai" : ""}">${esc(x.source || "")}</span>
         <button class="card-title" data-open>${esc(x.title)}</button>
         <p class="card-ex">${esc(x.text.slice(0, 180))}…</p>
         <div class="card-meta">${n} từ · ~${Math.max(1, Math.round(n / 130))} phút · đã luyện ${practiceCount(x.id)} lần</div>
         <div class="card-acts"><button class="btn small primary" data-open>🎤 Luyện bài này</button><button class="btn small ghost danger" data-del title="Xóa">🗑</button></div></div></article>`;
     }).join("");
+    const sel = ui[kind].sel;
+    box.classList.toggle("selecting", !!sel);
+    if (sel) box.querySelectorAll(".card").forEach((c) => c.classList.toggle("picked", sel.has(c.dataset.id)));
+    updateSelectBar(kind);
     box.onclick = (e) => {
       const card = e.target.closest(".card");
       if (!card) return;
+      if (ui[kind].sel) { // selecting: a click ticks / unticks the card instead of opening it
+        e.preventDefault();
+        const id = card.dataset.id;
+        ui[kind].sel.has(id) ? ui[kind].sel.delete(id) : ui[kind].sel.add(id);
+        card.classList.toggle("picked", ui[kind].sel.has(id));
+        updateSelectBar(kind);
+        return;
+      }
       if (e.target.closest("[data-link]")) { return; }
       if (e.target.closest("[data-del]")) {
         const it = getItem(kind, card.dataset.id);

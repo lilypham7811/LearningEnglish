@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Save to LearningEnglish",
   "short_name": "LearningEnglish",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "description": "Lưu video YouTube và bài báo vào app Shadow English (LearningEnglish) để học với Google AI.",
   "action": { "default_title": "Save to LearningEnglish (Alt+Shift+S)" },
   "background": { "service_worker": "background.js" },

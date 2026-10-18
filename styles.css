@@ -640,3 +640,15 @@ h2 { font-weight: 800; letter-spacing: -0.02em; }
 .stat-list dt { flex: 1; display: flex; align-items: center; gap: .45rem; color: var(--ink-2); }
 .stat-list dt::before { content: ""; width: .5rem; height: .5rem; border-radius: 50%; background: var(--pc); }
 .stat-list dd { margin: 0; font-weight: 700; color: var(--ink); font-variant-numeric: tabular-nums; }
+
+/* Select several cards to delete */
+.list-acts { display: inline-flex; align-items: center; gap: .5rem; }
+.btn.danger-fill { background: var(--bad); border-color: var(--bad); color: #fff; }
+.btn.danger-fill:disabled { opacity: .45; }
+.card { position: relative; }
+.pick { display: none; position: absolute; top: .6rem; right: .6rem; z-index: 2; width: 1.6rem; height: 1.6rem; border-radius: 50%; border: 2px solid var(--line); background: var(--surface); color: transparent; font-weight: 800; place-items: center; font-size: .85rem; }
+.cards.selecting .pick { display: grid; }
+.cards.selecting .card { cursor: pointer; }
+.cards.selecting .card * { pointer-events: none; }
+.cards.selecting .card.picked { outline: 2px solid var(--bad); outline-offset: -2px; }
+.cards.selecting .card.picked .pick { background: var(--bad); border-color: var(--bad); color: #fff; }
