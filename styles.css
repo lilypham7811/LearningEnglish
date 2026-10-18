@@ -620,3 +620,16 @@ h2 { font-weight: 800; letter-spacing: -0.02em; }
   .bm-link.bm-small { display: none; } /* bookmarks bar is a computer feature */
 }
 .cmdbar.addform { flex-direction: row; }
+
+/* Sổ từ vựng: one-line review bar, add word next to search */
+.review-bar { display: flex; align-items: center; gap: .8rem; padding: .75rem 1rem; flex-wrap: wrap; }
+.rv-ic { font-size: 1.4rem; flex: none; }
+.rv-text { flex: 1 1 14rem; display: flex; align-items: baseline; gap: .6rem; flex-wrap: wrap; min-width: 0; }
+.rv-text b { font-size: 1.05rem; }
+.rv-info { display: inline-grid; place-items: center; width: 1.2rem; height: 1.2rem; border-radius: 50%; background: var(--surface-2); color: var(--ink-3); font-size: .78rem; cursor: help; }
+.rv-info:hover, .rv-info:focus-visible { background: var(--leaf-soft); color: var(--leaf); }
+.review-bar .toolbar { flex: none; }
+.words-tools { display: flex; gap: .8rem; align-items: center; flex-wrap: wrap; }
+.words-tools .cmdbar { flex: 1 1 22rem; }
+.words-tools .search { flex: 1 1 16rem; }
+.words-tools .search .input { min-height: 3.1rem; border-radius: .9rem; }

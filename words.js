@@ -255,10 +255,14 @@
           <div class="kpi mini" style="--pc:var(--r4)"><div class="k-label">Đã thuộc</div><div class="k-val">${mastered}</div></div>
         </div></div>
       <div class="panel" id="reviewBox"></div>
-      <div class="lib-tools">
-        <form class="addrow" id="wordAdd"><input class="input" name="w" placeholder="Thêm từ bằng tay: laudable" autocomplete="off" /><button class="btn">＋ Thêm</button></form>
+      <div class="words-tools">
+        <form class="cmdbar" id="wordAdd">
+          <span class="cmd-ic" aria-hidden="true">＋</span>
+          <input class="cmd-input" name="w" placeholder="Thêm từ mới: laudable" autocomplete="off" aria-label="Thêm từ mới" />
+          <button class="btn primary">Thêm</button>
+        </form>
         <div class="search"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5 14 14"/></svg>
-          <input class="input" type="search" id="wordSearch" placeholder="Tìm từ…" value="${esc(ui.q)}" /></div>
+          <input class="input" type="search" id="wordSearch" placeholder="Tìm trong sổ…" value="${esc(ui.q)}" /></div>
       </div>
       <div class="lib-tools">
         <div class="seg" id="wordFilter">${[["all", "Tất cả"], ["due", "Ôn hôm nay"], ["learning", "Đang học"], ["mastered", "Đã thuộc"], ["video", "Từ video"]]
@@ -302,7 +306,8 @@
   function stageBadge(w) {
     if (w.stage >= MASTERED) return `<span class="chip st-done">✓ Đã thuộc</span>`;
     if (isDue(w)) return `<span class="chip st-due">Ôn hôm nay</span>`;
-    return `<span class="chip">Ôn ${dayLabel(w.due)}</span>`;
+    const tomorrow = startOfDay(Date.now()) + DAY;
+    return `<span class="chip">Ôn ${startOfDay(w.due) === tomorrow ? "ngày mai" : dayLabel(w.due)}</span>`;
   }
   function renderList() {
     const box = $("wordsList");
@@ -359,23 +364,30 @@
   }
 
   // ---------- Daily review (flashcards) ----------
-  function scheduleHtml() {
-    const today = startOfDay(Date.now());
-    const days = [...Array(7)].map((_, i) => today + (i + 1) * DAY);
-    const counts = days.map((d) => list().filter((w) => w.stage < MASTERED && startOfDay(w.due) === d).length);
-    return `<div class="sched">${days.map((d, i) => `<span class="sched-day${counts[i] ? " has" : ""}"><b>${counts[i]}</b>${dayLabel(d)}</span>`).join("")}</div>`;
+  // "Tiếp theo: ngày mai · 2 từ" (or the first day with words to review).
+  function nextReview() {
+    const tomorrow = startOfDay(Date.now()) + DAY;
+    const upcoming = list().filter((w) => w.stage < MASTERED && w.due >= tomorrow);
+    if (!upcoming.length) return list().length ? "Không có từ nào hẹn ôn sắp tới." : "Lưu từ mới để bắt đầu.";
+    const day = Math.min(...upcoming.map((w) => startOfDay(w.due)));
+    const n = upcoming.filter((w) => startOfDay(w.due) === day).length;
+    const when = day === tomorrow ? "ngày mai" : dayLabel(day);
+    return `Tiếp theo: ${when} · ${n} từ`;
   }
   function renderReview() {
     const box = $("reviewBox");
     if (!box) return;
     const d = due();
     if (!ui.review) {
-      box.innerHTML = `<div class="panel-body review-start">
-        <div><b>${d.length ? `🃏 Hôm nay ôn ${d.length} từ` : list().length ? "✓ Hôm nay đã ôn xong" : "🃏 Lịch ôn từ"}</b>
-          <div class="hint small">Mỗi từ được ôn vào ngày thứ 1, 3, 7, 10 và 30 sau khi học. Ôn đủ 5 lần là <b>đã thuộc</b>. Bấm “Chưa nhớ” thì từ đó học lại từ đầu.</div></div>
-        <div class="toolbar">${d.length ? `<button class="btn primary" data-start>Bắt đầu ôn (${d.length})</button>` : ""}
-          ${list().length ? `<button class="btn" data-voice>🎙️ Ôn bằng giọng nói</button>` : ""}</div></div>
-        <div class="panel-body sched-wrap"><div class="muted small">7 ngày tới:</div>${scheduleHtml()}</div>`;
+      // One line: what to do today and when the next review is. The schedule rule sits behind ⓘ.
+      box.innerHTML = `<div class="review-bar">
+        <span class="rv-ic" aria-hidden="true">${d.length ? "🃏" : "✓"}</span>
+        <div class="rv-text"><b>${d.length ? `Hôm nay ôn ${d.length} từ` : list().length ? "Hôm nay đã ôn xong" : "Chưa có từ để ôn"}</b>
+          <span class="muted small">${nextReview()}</span>
+          <span class="rv-info" tabindex="0" title="Mỗi từ được ôn vào ngày thứ 1, 3, 7, 10 và 30 sau khi học. Ôn đủ 5 lần là đã thuộc. Bấm “Chưa nhớ” thì từ đó học lại từ đầu." aria-label="Lịch ôn: ngày 1, 3, 7, 10 và 30 sau khi học">ⓘ</span></div>
+        <div class="toolbar">${d.length ? `<button class="btn primary" data-start>Bắt đầu ôn</button>` : ""}
+          ${list().length ? `<button class="btn" data-voice>🎙️ Ôn bằng giọng nói</button>` : ""}</div>
+      </div>`;
       // Voice review in ChatGPT / Gemini: today's words, or the 12 newest if none are due.
       box.querySelector("[data-voice]")?.addEventListener("click", () => {
         const words = (d.length ? d : list()).slice(0, 12);
