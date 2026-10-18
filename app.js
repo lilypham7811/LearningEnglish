@@ -62,7 +62,15 @@
 
   // ---------- Speech ----------
   // Speak one text; resolves when finished. onWord(charIndex) for highlighting.
+  // Natural AI voice (voice.js) when it is turned on and ready; otherwise the device's voice.
   function speak(text, voice, rate, onWord) {
+    if (window.SE_VOICE?.enabled()) {
+      const which = voice && voice === state.voiceB && state.voiceB !== state.voiceA ? "B" : "A";
+      return window.SE_VOICE.speak(text, which, rate).then((ok) => (ok ? undefined : speakDevice(text, voice, rate, onWord)));
+    }
+    return speakDevice(text, voice, rate, onWord);
+  }
+  function speakDevice(text, voice, rate, onWord) {
     return new Promise((resolve) => {
       const u = new SpeechSynthesisUtterance(text);
       if (voice) { u.voice = voice; u.lang = voice.lang; } else u.lang = "en-US";
@@ -75,6 +83,7 @@
   function stopAll() {
     state.playToken++;
     synth.cancel();
+    window.SE_VOICE?.stop();
     document.querySelectorAll(".line.active").forEach((el) => el.classList.remove("active"));
     clearWordHighlight();
   }
@@ -87,6 +96,8 @@
     li?.classList.add("active");
     if (!state.rp) li?.scrollIntoView({ block: "nearest", behavior: "smooth" });
     const words = li ? [...li.querySelectorAll(".w")] : [];
+    const next = state.dialog.lines[i + 1]; // get the next line ready while this one plays
+    if (next) window.SE_VOICE?.prefetch(next[1], next[0] === 0 ? "A" : "B");
     await speak(state.dialog.lines[i][1], voiceFor(i), rate, (ci) => highlightWord(words, ci));
     if (token === state.playToken) { li?.classList.remove("active"); clearWordHighlight(); }
     return token === state.playToken; // false = cancelled
@@ -1210,6 +1221,7 @@ Name2: English sentence | Vietnamese translation`;
   }
   function openSettings() {
     $("geminiKey").value = geminiKey();
+    window.SE_VOICE?.refreshSettings();
     $("settings").showModal();
   }
   function updateAiState() {
@@ -1610,7 +1622,7 @@ Name2: English sentence | Vietnamese translation`;
   async function clearAppCaches() {
     try {
       for (const r of (await navigator.serviceWorker?.getRegistrations()) || []) await r.unregister();
-      for (const k of (await caches?.keys()) || []) await caches.delete(k);
+      for (const k of (await caches?.keys()) || []) if (k.startsWith("shadow-english-")) await caches.delete(k); // keep the AI voice
     } catch { /* nothing to clear */ }
   }
   function showUpdateButton(latest) {

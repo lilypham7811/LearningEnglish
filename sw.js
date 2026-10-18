@@ -1,9 +1,9 @@
 // Service worker: lets the installed app open offline (library dialogs, saved items, practice log).
 // App files: network first, so updates show up right away; the cached copy is used only when offline.
 // Google Fonts: cache first. Google AI and YouTube requests are never cached.
-const CACHE = "shadow-english-v27";
+const CACHE = "shadow-english-v28";
 const SHELL = [
-  "./", "./index.html", "./styles.css?v=28", "./dialogs.js?v=28", "./app.js?v=28", "./live.js?v=28", "./library.js?v=28", "./words.js?v=28", "./handoff.js?v=28", "./sync.js?v=28",
+  "./", "./index.html", "./styles.css?v=29", "./dialogs.js?v=29", "./app.js?v=29", "./live.js?v=29", "./library.js?v=29", "./words.js?v=29", "./handoff.js?v=29", "./voice.js?v=29", "./sync.js?v=29",
   "./manifest.webmanifest", "./icons/icon-192.png", "./icons/icon-512.png", "./icons/apple-touch-icon.png",
 ];
 
@@ -12,7 +12,7 @@ self.addEventListener("install", (e) => {
 });
 self.addEventListener("activate", (e) => {
   e.waitUntil(caches.keys()
-    .then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k))))
+    .then((keys) => Promise.all(keys.filter((k) => k.startsWith("shadow-english-") && k !== CACHE) /* keep the AI voice model and spoken sentences */.map((k) => caches.delete(k))))
     .then(() => self.clients.claim()));
 });
 

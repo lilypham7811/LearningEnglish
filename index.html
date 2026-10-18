@@ -32,7 +32,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&display=swap" />
-  <link rel="stylesheet" href="styles.css?v=28" />
+  <link rel="stylesheet" href="styles.css?v=29" />
 </head>
 <body>
 <div class="shell">
@@ -364,9 +364,10 @@
     <p class="hint small">🔒 Khoá chỉ lưu trong trình duyệt này, không gửi đi đâu ngoài Google. Gói miễn phí: Google có thể dùng nội dung trò chuyện để cải thiện sản phẩm, nên đừng nói thông tin riêng tư.</p>
 
     <h3>Giọng đọc bài</h3>
-    <label>Người nói A <select id="voiceA" class="select"></select></label>
-    <label>Người nói B <select id="voiceB" class="select"></select></label>
-    <p class="hint small">Lấy từ trình duyệt. Microsoft Edge có giọng “Natural” rất tự nhiên.</p>
+    <div id="aiVoiceBox"></div>
+    <label>Giọng của máy – người nói A <select id="voiceA" class="select"></select></label>
+    <label>Giọng của máy – người nói B <select id="voiceB" class="select"></select></label>
+    <p class="hint small">Giọng của máy dùng khi tắt giọng AI, hoặc trong lúc giọng AI đang tải. Microsoft Edge có giọng “Natural” khá tự nhiên.</p>
 
     <h3>AI viết hội thoại khi chưa có khoá Google</h3>
     <label>Mô hình chạy trên máy
@@ -407,12 +408,13 @@
   </form>
 </dialog>
 
-<script src="dialogs.js?v=28"></script>
-<script src="app.js?v=28"></script>
-<script src="live.js?v=28"></script>
-<script src="library.js?v=28"></script>
-<script src="words.js?v=28"></script>
-<script src="handoff.js?v=28"></script>
-<script src="sync.js?v=28"></script>
+<script src="dialogs.js?v=29"></script>
+<script src="app.js?v=29"></script>
+<script src="live.js?v=29"></script>
+<script src="library.js?v=29"></script>
+<script src="words.js?v=29"></script>
+<script src="handoff.js?v=29"></script>
+<script src="voice.js?v=29"></script>
+<script src="sync.js?v=29"></script>
 </body>
 </html>

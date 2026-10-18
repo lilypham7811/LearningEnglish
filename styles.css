@@ -652,3 +652,5 @@ h2 { font-weight: 800; letter-spacing: -0.02em; }
 .cards.selecting .card * { pointer-events: none; }
 .cards.selecting .card.picked { outline: 2px solid var(--bad); outline-offset: -2px; }
 .cards.selecting .card.picked .pick { background: var(--bad); border-color: var(--bad); color: #fff; }
+.ai-voice-opts { display: flex; flex-wrap: wrap; gap: .2rem 1rem; align-items: flex-end; padding: .2rem 0 .2rem 1.6rem; }
+.ai-voice-opts label { flex: 1 1 12rem; margin: .3rem 0; }
