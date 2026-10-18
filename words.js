@@ -65,6 +65,7 @@
   // keepWord: the learner edited the word by hand, so don't change it to its base form.
   async function lookup(id, { force = false, keepWord = false } = {}) {
     const it = list().find((x) => x.id === id);
+    keepWord = keepWord || !!it?.manual;
     if (!it || (it.dictSource === "oxford" && !force && it.lemmaChecked)) return;
     let patch = null;
     try {
@@ -79,14 +80,13 @@
       if (g || f) {
         // Examples: one from Oxford first, then everyday sentences from Tatoeba, then the rest of Oxford's.
         // The other free dictionary's examples are left out: they are often old quotes and headlines.
-        const byLen = (a, b) => a.split(" ").length - b.split(" ").length;
-        const ox = (g?.examples || []).sort(byLen);
-        const examples = [...ox.slice(0, 1), ...t, ...ox.slice(1)]
-          .filter((x, i, a) => a.findIndex((y) => y.toLowerCase() === x.toLowerCase()) === i)
-          .slice(0, 3);
+        const seen = new Set();
+        const pick = (arr, src) => arr.filter((x) => { const k = x.toLowerCase().replace(/[^a-z ]/g, ""); if (seen.has(k)) return false; seen.add(k); return true; }).map((x) => [x, src]);
+        const both = [...pick(g?.examples || [], "Oxford"), ...pick(t, "Tatoeba")].slice(0, 3);
+        const examples = both.map(([x]) => x), examplesSrc = both.map(([, src]) => src);
         patch = {
           lemma: g?.base || "", pos: g?.pos || f?.pos || "", ipa: f?.ipa || "", defEn: g?.defEn || f?.defEn || "",
-          meaningVi: g?.meaningVi || "", examples, dictSource: g ? "google" : "free",
+          meaningVi: g?.meaningVi || "", examples, examplesSrc, exV: 2, dictSource: g ? "google" : "free",
         };
       }
     }
@@ -118,7 +118,7 @@
     if (!it || !word || word === it.word) return false;
     const twin = list().find((x) => x.id !== id && x.word.toLowerCase() === word.toLowerCase());
     if (twin) { toast(`“${twin.word}” đã có trong sổ.`); return false; }
-    update(id, { word, form: it.form || it.word, pos: "", ipa: "", defEn: "", meaningVi: "", examples: [], dictSource: null, lemmaChecked: true });
+    update(id, { word, form: it.form || it.word, pos: "", ipa: "", defEn: "", meaningVi: "", examples: [], dictSource: null, lemmaChecked: true, manual: true });
     tried.add(id);
     lookup(id, { force: true, keepWord: true });
     toast(`Đã sửa thành “${word}”, đang tra nghĩa mới…`);
@@ -157,7 +157,10 @@
       meaningVi: vi.join(", "),
       pos: [...new Set((d.definitions || d.dict || []).map((x) => POS_EN[x.pos] || x.pos))].slice(0, 2).join(", "),
       defEn: firstDef?.entry?.[0]?.gloss ? tidy(firstDef.entry[0].gloss) : "",
-      examples: (d.examples?.example || []).map((e) => tidy(e.text)).filter((x) => x.split(" ").length >= 3),
+      // Oxford Languages examples: the definitions' own examples first, then the extra example list.
+      examples: [...(d.definitions || []).flatMap((x) => (x.entry || []).map((e) => e.example)).filter(Boolean),
+                 ...(d.examples?.example || []).map((e) => e.text)]
+        .map(tidy).filter((x) => { const n = x.split(" ").length; return n >= 3 && n <= 20; }),
     };
   }
   async function oxfordViaAi(it) {
@@ -329,7 +332,7 @@
     renderList();
     // Words saved while offline (or from the other device) still without a meaning: look them up now.
     // Also upgrades words looked up with the older, weaker dictionary (no Vietnamese meaning).
-    list().filter((w) => (!w.defEn || !w.lemmaChecked || (!w.meaningVi && w.dictSource !== "oxford")) && !tried.has(w.id)).slice(0, 10)
+    list().filter((w) => (!w.defEn || !w.lemmaChecked || (w.dictSource !== "oxford" && (w.exV !== 2 || !w.meaningVi))) && !tried.has(w.id)).slice(0, 10)
       .forEach((w) => { tried.add(w.id); lookup(w.id, { force: true }); });
   }
   const tried = new Set();
@@ -372,8 +375,8 @@
         <td data-label="Nghĩa (Oxford)">${w.defEn ? `<div class="wc-def">${esc(w.defEn)}</div>` : `<span class="muted small">${tried.has(w.id) ? "Chưa tìm thấy" : "Đang tra…"}</span>`}
           <a class="wc-ox" href="${oxfordUrl(w.word)}" target="_blank" rel="noopener">${w.dictSource === "oxford" ? "Oxford ↗" : "Xem trên Oxford ↗"}</a></td>
         <td data-label="Nghĩa tiếng Việt">${w.meaningVi ? `<div class="wc-mean">${esc(w.meaningVi)}</div>` : `<a class="small" target="_blank" rel="noopener" href="https://translate.google.com/?sl=en&tl=vi&op=translate&text=${encodeURIComponent(w.word)}">🌐 Google Dịch</a>`}</td>
-        <td data-label="3 câu ví dụ"><ol class="wc-exs">${[...(w.context ? [{ t: w.context, mine: true }] : []), ...(w.examples || []).map((t) => ({ t }))].slice(0, 3)
-          .map((x, i) => `<li${x.mine ? ' class="mine" title="Câu bạn gặp từ này"' : ""}><button type="button" class="ex-say" data-a="ex" data-i="${i}" aria-label="Nghe câu">🔊</button> ${mark(w, x.t)}</li>`).join("") || '<li class="muted">Đang tìm câu ví dụ…</li>'}</ol></td>
+        <td data-label="3 câu ví dụ"><ol class="wc-exs">${[...(w.context ? [{ t: w.context, mine: true }] : []), ...(w.examples || []).map((t, i) => ({ t, src: w.examplesSrc?.[i] || "" }))].slice(0, 3)
+          .map((x, i) => `<li${x.mine ? ' class="mine" title="Câu bạn gặp từ này"' : ""}><button type="button" class="ex-say" data-a="ex" data-i="${i}" aria-label="Nghe câu">🔊</button> ${mark(w, x.t)}${x.src ? ` <span class="ex-src">${x.src}</span>` : ""}</li>`).join("") || '<li class="muted">Đang tìm câu ví dụ…</li>'}</ol></td>
       </tr>`).join("") + "</tbody>";
     box.onclick = (e) => {
       const b = e.target.closest("[data-a]");
