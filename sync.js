@@ -15,7 +15,10 @@
   const TOMB_DAYS = 120; // forget deletions after this long
 
   const token = () => (SE.safeGet("syncToken") || "").trim();
-  const S = { busy: false, again: false, timer: 0, lastPush: 0 };
+  const S = { busy: false, again: false, timer: 0, lastPush: 0, urgent: false, etag: null, remote: null };
+  const PUSH_SOON = 1500;     // your own saves (words, videos, …) go up almost immediately
+  const LOG_EVERY = 60000;    // the practice-time log changes every second: send it at most once a minute
+  const POLL_EVERY = 15000;   // while the app is open, check for changes from the other device
 
   // ---------- Collect / merge ----------
   function collect(withKey) {
@@ -89,8 +92,13 @@
     return o;
   }
   // Returns { data, sha } of the shared copy, or { data: null, sha: null } if it doesn't exist yet.
+  // Returns { data, sha } of the shared copy ({ data: null, sha: null } if it doesn't exist yet).
+  // Conditional request: if nothing changed since last time GitHub answers 304, which is fast and
+  // doesn't count against the rate limit, so checking every few seconds is fine.
   async function pull(o) {
-    const r = await gh(`/repos/${o}/${REPO}/contents/${FILE}`);
+    const conditional = S.etag && S.remote;
+    const r = await gh(`/repos/${o}/${REPO}/contents/${FILE}`, conditional ? { headers: { "If-None-Match": S.etag } } : {});
+    if (r.status === 304) return S.remote;
     if (r.status === 404) {
       const repo = await gh(`/repos/${o}/${REPO}`);
       if (repo.status === 404) throw new Error(`Mã đồng bộ chưa được cấp quyền cho kho “${REPO}”. Hãy tạo lại mã và chọn kho này.`);
@@ -106,7 +114,9 @@
       text = await raw.text();
     }
     const json = JSON.parse(text || "{}");
-    return { data: json.data || null, sha: j.sha };
+    S.etag = r.headers.get("ETag");
+    S.remote = { data: json.data || null, sha: j.sha };
+    return S.remote;
   }
   async function push(o, data, sha) {
     const body = { message: `Sync from ${navigator.userAgent.includes("iPhone") ? "iPhone" : "computer"}`,
@@ -120,12 +130,13 @@
     return true;
   }
 
-  async function syncNow() {
+  // quiet: background check (no "Đang đồng bộ…" flicker, and the practice log alone isn't pushed more than once a minute).
+  async function syncNow({ quiet = false } = {}) {
     if (!token()) return setStatus("off");
     if (S.busy) { S.again = true; return; }
     S.busy = true;
     clearTimeout(S.timer);
-    setStatus("busy");
+    if (!quiet) setStatus("busy");
     try {
       SE.saveSession();
       const o = await owner();
@@ -134,8 +145,16 @@
         const { changed } = merge(remote.data);
         if (changed) { SE.refreshAll(); document.dispatchEvent(new Event("se:synced")); }
         const local = collect(true);
-        if (remote.data && JSON.stringify(local) === JSON.stringify(remote.data)) break; // already the same
-        if (await push(o, local, remote.sha)) break;
+        if (remote.data && JSON.stringify(local) === JSON.stringify(remote.data)) { S.urgent = false; break; } // same on both sides
+        // Only the practice log differs and it was sent less than a minute ago: wait for the next round.
+        if (remote.data && !S.urgent && !changed && Date.now() - S.lastPush < LOG_EVERY) { schedule(LOG_EVERY - (Date.now() - S.lastPush)); break; }
+        const sent = await push(o, local, remote.sha);
+        if (sent) {
+          S.urgent = false;
+          S.remote = null; S.etag = null; // our own write: read it fresh next time
+          break;
+        }
+        S.remote = null; S.etag = null; // the other device saved first: read again, merge, retry
       }
       SE.rawSet("syncLast", Date.now());
       setStatus("ok");
@@ -143,15 +162,18 @@
       setStatus("error", err.message || "Không kết nối được. Kiểm tra Internet.");
     } finally {
       S.busy = false;
-      if (S.again) { S.again = false; dirty(); }
+      if (S.again) { S.again = false; schedule(PUSH_SOON); }
     }
   }
-  // Something changed here: sync soon, but not more than about once a minute while practising.
-  function dirty() {
-    if (!token()) return;
+  function schedule(ms) {
     clearTimeout(S.timer);
-    const wait = Math.max(5000, 60000 - (Date.now() - S.lastPush));
-    S.timer = setTimeout(syncNow, wait);
+    S.timer = setTimeout(() => syncNow({ quiet: true }), ms);
+  }
+  // Something changed on this device. Your own saves sync in ~1.5 s; the practice log at most once a minute.
+  function dirty(key) {
+    if (!token()) return;
+    if (key !== "log") { S.urgent = true; return schedule(PUSH_SOON); }
+    if (!S.urgent) schedule(Math.max(PUSH_SOON, LOG_EVERY - (Date.now() - S.lastPush)));
   }
 
   // ---------- Status in the rail and in Settings ----------
@@ -264,7 +286,8 @@
     if (document.visibilityState === "visible") syncNow();      // phone app reopened: get the latest
     else if (S.timer) { clearTimeout(S.timer); syncNow(); }    // leaving with unsynced changes: send them now
   });
-  setInterval(() => { if (document.visibilityState === "visible") syncNow(); }, 3 * 60000);
+  setInterval(() => { if (document.visibilityState === "visible" && navigator.onLine !== false) syncNow({ quiet: true }); }, POLL_EVERY);
+  window.addEventListener("online", () => syncNow({ quiet: true })); // back online: catch up right away
   migrationBanner();
   receiveMigration();
   if (token()) syncNow(); else setStatus("off");

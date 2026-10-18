@@ -1117,7 +1117,7 @@ Name2: English sentence | Vietnamese translation`;
     try {
       if (SYNC_LISTS.includes(k) && Array.isArray(v)) v = stampList(k, v);
       localStorage.setItem("se_" + k, JSON.stringify(v));
-      if (SYNC_LISTS.includes(k) || SYNC_PREFS.includes(k)) window.SE_SYNC?.dirty();
+      if (SYNC_LISTS.includes(k) || SYNC_PREFS.includes(k)) window.SE_SYNC?.dirty(k);
       return true;
     } catch { return false; }
   }
