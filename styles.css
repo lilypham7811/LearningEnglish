@@ -10,7 +10,7 @@
   --shadow:0 1px 2px rgba(23,34,27,.06),0 8px 24px -12px rgba(23,34,27,.18);
   --sheet-shadow:0 -10px 40px -10px rgba(23,34,27,.35);
   --bubble-a:#F1F7F2; --bubble-b:#FFF8E6; --hl:#FFE36B; --rec:#C8372D;
-  --f-display:"Fraunces","Iowan Old Style","Georgia",serif;
+  --f-display:"Be Vietnam Pro","Segoe UI",system-ui,-apple-system,sans-serif; /* headlines use the same font as the body */
   --f-body:"Be Vietnam Pro","Segoe UI",system-ui,-apple-system,sans-serif;
 }
 @media (prefers-color-scheme: dark) {
@@ -586,3 +586,11 @@ table.dlg-table { width: 100%; min-width: 0; border-collapse: separate; border-s
   .dlg-table .c-date { grid-column: 2; grid-row: 1; text-align: right; font-size: .8rem; }
   .dlg-table .c-title { grid-column: 1 / -1; grid-row: 2; }
 }
+
+/* Headlines in Be Vietnam Pro: a little tighter so large sans titles look crisp */
+h2, .brand h1, .panel-head h3, .dialog-head h3, .d-title, .rp-setup h3, .sheet h3, .empty b, .kpi .k-val, .score, .wc-word, .flash-word, .gai-hello b {
+  letter-spacing: -0.01em;
+}
+h2 { font-weight: 800; letter-spacing: -0.02em; }
+.panel-head h3, .dialog-head h3, .d-title { font-weight: 700; }
+.reader .reader-text, .prompter-text { font-family: var(--f-body); }
