@@ -1143,6 +1143,8 @@ Name2: English sentence | Vietnamese translation`;
   }
 
   function updateAiNote() {
+    $("aiNote").hidden = true; // tip line removed at the learner's request
+    return;
     const m = currentModel();
     if (geminiKey()) {
       $("aiNote").textContent = "✨ Chủ đề có sẵn mở ngay. Chủ đề mới do Google AI viết trong vài giây, kèm nghĩa tiếng Việt, và tự lưu vào “⭐ Của tôi”.";

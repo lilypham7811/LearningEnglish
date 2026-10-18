@@ -248,8 +248,7 @@
     const root = $("view-words");
     const all = list();
     const mastered = all.filter((w) => w.stage >= MASTERED).length;
-    root.innerHTML = `<div class="vhead"><div><p class="eyebrow">Phần 6 · Từ vựng</p><h2>Sổ từ vựng</h2>
-        <p class="hint">Lưu từ: bấm vào một từ trong phụ đề video, gõ vào ô dưới video, bôi đen chữ ở bất cứ đâu trong app, hoặc trên máy tính bôi đen rồi chuột phải → <b>Save word to LearningEnglish</b>.</p></div>
+    root.innerHTML = `<div class="vhead"><div><p class="eyebrow">Phần 6 · Từ vựng</p><h2>Sổ từ vựng</h2></div>
         <div class="kpis words-kpis">
           <div class="kpi mini" style="--pc:var(--r5)"><div class="k-label">Tổng số từ</div><div class="k-val">${all.length}</div></div>
           <div class="kpi mini" style="--pc:var(--r1)"><div class="k-label">Ôn hôm nay</div><div class="k-val">${due().length}</div></div>
