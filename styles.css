@@ -675,3 +675,21 @@ h2 { font-weight: 800; letter-spacing: -0.02em; }
 .wc-editor .input { width: 100%; min-width: 9rem; }
 .ex-src { display: inline-block; margin-left: .3rem; padding: 0 .4rem; border-radius: 99px; background: var(--surface-2); color: var(--ink-3); font-size: .68rem; font-weight: 600; vertical-align: .1rem; }
 .chip.st-new { background: var(--turmeric-soft); color: var(--warn); }
+
+/* Word families and Oxford pronunciation */
+.words-opts { display: flex; flex-wrap: wrap; align-items: center; gap: .8rem; }
+.fam-toggle { display: inline-flex; align-items: center; gap: .35rem; font-size: .88rem; font-weight: 600; color: var(--ink-2); cursor: pointer; }
+.seg-sm button { padding: .3rem .7rem; font-size: .82rem; }
+.words-table tr.fam-row td { background: var(--surface-2); padding: .45rem .9rem; font-size: .88rem; border-bottom: 0; }
+.fam-row .fam-w { font-weight: 600; } .fam-row i, .fam-chip i, .flash-fam i { font-style: normal; color: var(--ink-3); font-size: .78em; }
+.fam-dot { margin: 0 .35rem; color: var(--ink-3); }
+.words-table tr.in-fam td:first-child { box-shadow: inset 3px 0 0 var(--turmeric); }
+.words-table tr.fam-sug td { background: var(--surface); padding: .6rem .9rem; }
+.fam-box { display: flex; flex-direction: column; gap: .5rem; }
+.fam-chips { display: flex; flex-wrap: wrap; gap: .4rem; }
+.fam-chip { display: inline-flex; align-items: center; gap: .3rem; padding: .25rem .65rem; border-radius: 99px; border: 1px solid var(--line); background: var(--surface); font: inherit; font-size: .88rem; }
+.fam-chip.have { color: var(--ink-3); }
+.fam-chip.add { cursor: pointer; font-weight: 600; } .fam-chip.add:hover { border-color: var(--ink-2); }
+.fam-foot { display: flex; flex-wrap: wrap; align-items: center; gap: .6rem; }
+.flash-fam { margin-top: .4rem; font-size: .92rem; color: var(--ink-2); }
+@media (max-width: 760px) { .words-table tr.fam-row, .words-table tr.fam-sug { padding: 0; } .words-table tr.fam-row td, .words-table tr.fam-sug td { padding: .5rem .9rem !important; } }

@@ -2,8 +2,10 @@
 // word | part of speech + IPA | listen + say it | Oxford meaning | Vietnamese meaning | 3 common examples.
 // Words come from: clicking a word in the video subtitles, the box under a video, selecting text anywhere
 // in the app, or right-click "Save word to LearningEnglish" in the browser extension.
-// Review schedule (days after the word was learned): 1, 3, 7, 10 and 30. After the last one it is "đã thuộc".
-// "Chưa nhớ" starts the schedule again from today.
+// Review schedule (days after the word was learned): 1, 3, 7, 14 and 30, at most 10 words a day.
+// After the last one it is "đã thuộc". "Chưa nhớ" starts the schedule again from today.
+// Word families (metabolism, metabolic, metabolize) sit together in the table and are learned on the same day.
+// "Nghe" plays Oxford Learner's Dictionaries' own recording of the word.
 (() => {
   "use strict";
   const SE = window.SE;
@@ -16,7 +18,9 @@
   const FUZZ = [0, 1, 2, 3, 3];        // days a review may move (earlier/later) to keep days under the limit
   const MASTERED = OFFSETS.length + 1;
   const DAILY = 10;                    // at most 10 words a day: reviews that are due first, then new words
-  const ui = { q: "", f: "all", review: null };
+  const pref = (k, d) => { try { return localStorage.getItem("se_" + k) ?? d; } catch { return d; } };
+  const setPref = (k, v) => { try { localStorage.setItem("se_" + k, v); } catch { /* private mode */ } };
+  const ui = { q: "", f: "all", review: null, group: pref("wordsGroup", "1") === "1", accent: pref("accent", "gb") };
 
   const list = () => (SE.safeGet("words") || []).map(upgrade);
   function saveList(items) { SE.safeSet("words", items); updateNav(); }
@@ -30,13 +34,95 @@
   const today = () => startOfDay(Date.now());
   const isDue = (w) => w.stage >= 1 && w.stage < MASTERED && w.due != null && startOfDay(w.due) <= today();
   const reviewedToday = (w) => w.lastReview && startOfDay(w.lastReview) === today();
+  // ---------- Word families ----------
+  // metabolism, metabolic, metabolize, metabolically → family "metabol": common endings are taken off
+  // (up to 3 times, keeping at least 4 letters). Good for most families; a wrong match is fixed by hand
+  // with "Tách khỏi họ" (familyKey = the word itself). Words added from the suggestions keep the family's key.
+  const SUFFIXES = ["ically", "ization", "isation", "ational", "fulness", "iveness", "ability", "ibility", "ation", "ition",
+    "ments", "ment", "ness", "ical", "ally", "ably", "ibly", "ism", "ist", "ity", "ive", "ize", "ise", "ous", "ful", "less",
+    "able", "ible", "ence", "ance", "ency", "ancy", "ent", "ant", "ion", "ic", "al", "ly", "er", "or", "s", "y", "e", "i"]
+    .sort((a, b) => b.length - a.length);
+  function rootOf(word) {
+    let w = (word || "").toLowerCase().trim();
+    if (!/^[a-z]+$/.test(w)) return w; // phrases are a family of their own
+    for (let pass = 0; pass < 3; pass++) {
+      const x = SUFFIXES.find((x) => w.endsWith(x) && w.length - x.length >= 4 && !(x === "s" && /[sui]s$/.test(w)));
+      if (!x) break;
+      w = w.slice(0, -x.length);
+    }
+    return w;
+  }
+  const famKey = (w) => w.familyKey || rootOf(w.word);
+  const siblings = (w, all = list()) => all.filter((x) => x.id !== w.id && famKey(x) === famKey(w));
+  // Other words of the family from Datamuse (free, with part of speech and how common the word is):
+  // only real family members (same root), common enough, no plurals and no British -ise twins of -ize words.
+  const famCache = new Map();
+  async function suggestFamily(w) {
+    const r = rootOf(w.word);
+    if (!/^[a-z]{4,}$/.test(r)) return [];
+    if (!famCache.has(r)) {
+      famCache.set(r, fetch(`https://api.datamuse.com/words?sp=${r}*&md=pf&max=40`).then((x) => x.json()).then((rows) => {
+        const out = rows.map((x) => ({ word: x.word, f: +((x.tags || []).find((t) => t.startsWith("f:")) || "f:0").slice(2),
+            pos: (x.tags || []).filter((t) => /^(n|v|adj|adv)$/.test(t)) }))
+          .filter((x) => /^[a-z]+$/.test(x.word) && x.f >= 0.3 && rootOf(x.word) === r);
+        const set = new Set(out.map((x) => x.word));
+        return out.filter((x) => !(x.word.endsWith("s") && set.has(x.word.slice(0, -1))) &&
+            !(/is(e|ation|ed|ing)$/.test(x.word) && set.has(x.word.replace(/is(e|ation|ed|ing)$/, "iz$1"))))
+          .sort((a, b) => b.f - a.f).slice(0, 8);
+      }).catch(() => { famCache.delete(r); return []; }));
+    }
+    return famCache.get(r);
+  }
+  const POS_VI = { n: "danh từ", v: "động từ", adj: "tính từ", adv: "trạng từ" };
+
+  // ---------- Real pronunciation ----------
+  // Single words play Oxford Learner's Dictionaries' own recordings (the 🔊 on the Oxford page),
+  // British or American. Oxford names the files word__gb_1.mp3 / word__us_1.mp3 (word_1__… for words with
+  // several entries) in folders made of the file name's first 1, 3 and 5 letters. Phrases and words Oxford
+  // doesn't have use the app's voice.
+  const OX_MEDIA = "https://www.oxfordlearnersdictionaries.com/media/english/";
+  const oxFile = (dir, name) => `${OX_MEDIA}${dir}/${name[0]}/${name.slice(0, 3)}/${name.slice(0, 5)}/${name}.mp3`;
+  const oxFound = new Map(); // "gb:word" → working URL, or "" when Oxford has no recording
+  let player = null;
+  function playUrl(url) {
+    return new Promise((resolve) => {
+      player?.pause();
+      const a = (player = new Audio(url));
+      let done = false;
+      const end = (ok) => { if (!done) { done = true; if (!ok) a.pause(); resolve(ok); } };
+      a.onplaying = () => end(true);
+      a.onerror = () => end(false);
+      setTimeout(() => end(false), 5000);
+      a.play().catch(() => end(false));
+    });
+  }
+  async function sayWord(word) {
+    const w = (word || "").trim().toLowerCase();
+    if (!/^[a-z]+$/.test(w)) return SE.say(word);
+    const order = ui.accent === "us" ? [["us_pron", "us"], ["uk_pron", "gb"]] : [["uk_pron", "gb"], ["us_pron", "us"]];
+    const key = ui.accent + ":" + w;
+    const known = oxFound.get(key);
+    const tries = known != null ? (known ? [known] : [])
+      : order.flatMap(([dir, t]) => [`${w}__${t}_1`, `${w}_1__${t}_1`, `${w}__${t}_2`].map((n) => oxFile(dir, n)));
+    for (const u of tries) if (await playUrl(u)) { oxFound.set(key, u); return; }
+    oxFound.set(key, "");
+    return SE.say(word);
+  }
+
   // Today's list, at most DAILY words including those already reviewed today:
   // due reviews first (most overdue, then earliest stage), then new words (oldest saved first).
   function todayQueue(all = list()) {
     const left = Math.max(0, DAILY - all.filter(reviewedToday).length);
     const reviews = all.filter((w) => isDue(w) && !reviewedToday(w)).sort((a, b) => a.due - b.due || a.stage - b.stage);
     const fresh = all.filter((w) => w.stage === 0 && !reviewedToday(w)).sort((a, b) => a.savedAt - b.savedAt);
-    return [...reviews, ...fresh].slice(0, left);
+    // Words of one family come one after another, and a new word brings its new family members along.
+    const cands = [...reviews, ...fresh], seen = new Set(), out = [];
+    for (const w of cands) {
+      if (seen.has(w.id)) continue;
+      const k = famKey(w);
+      for (const x of cands) if (!seen.has(x.id) && famKey(x) === k) { seen.add(x.id); out.push(x); }
+    }
+    return out.slice(0, left);
   }
   const due = () => todayQueue();
   // Pick the review day: the planned day (learning day + 1/3/7/14/30), moved up to FUZZ days earlier or
@@ -84,6 +170,7 @@
       context: (raw.context || "").replace(/\s+/g, " ").trim().slice(0, 400),
       sourceKind: raw.sourceKind || "", sourceTitle: raw.sourceTitle || "", sourceUrl: raw.sourceUrl || "", time: raw.time ?? null,
       savedAt: now, learnedAt: null, stage: 0, due: null, examples: [],
+      ...(raw.familyKey ? { familyKey: raw.familyKey } : {}),
     };
     saveList([it, ...items]);
     SE.track("word");
@@ -268,7 +355,7 @@
     pop.onclick = (e) => {
       const b = e.target.closest("[data-w]");
       if (!b) return;
-      if (b.dataset.w === "say") SE.say(word);
+      if (b.dataset.w === "say") sayWord(word);
       else { save({ ...info, word }); closePop(); }
     };
   }
@@ -341,11 +428,25 @@
       <div class="lib-tools">
         <div class="seg" id="wordFilter">${[["all", "Tất cả"], ["due", "Ôn hôm nay"], ["learning", "Đang học"], ["mastered", "Đã thuộc"], ["video", "Từ video"]]
           .map(([k, l]) => `<button data-f="${k}" aria-pressed="${ui.f === k}">${l}</button>`).join("")}</div>
+        <div class="words-opts">
+          <label class="fam-toggle"><input type="checkbox" id="famToggle" ${ui.group ? "checked" : ""} /> 🧩 Gom theo họ từ</label>
+          <div class="seg seg-sm" id="accentSeg" title="Giọng đọc từ: bản ghi âm của từ điển Oxford">${[["gb", "🔊 Giọng Anh"], ["us", "Giọng Mỹ"]]
+            .map(([k, l]) => `<button data-acc="${k}" aria-pressed="${ui.accent === k}">${l}</button>`).join("")}</div>
+        </div>
         ${SE.geminiKey() && all.some((w) => w.dictSource !== "oxford") ? `<button class="btn ghost" id="oxfordAll">🔄 Lấy nghĩa Oxford cho các từ cũ</button>` : ""}
       </div>
       <div class="panel words-table-wrap"><div class="table-scroll"><table class="lib words-table" id="wordsList"></table></div></div>`;
     root.querySelector("#wordAdd").onsubmit = (e) => { e.preventDefault(); const v = e.target.w.value.trim(); if (v) { save({ word: v }); e.target.w.value = ""; } };
     root.querySelector("#wordSearch").oninput = (e) => { ui.q = e.target.value; renderList(); };
+    root.querySelector("#famToggle").onchange = (e) => { ui.group = e.target.checked; setPref("wordsGroup", ui.group ? "1" : "0"); renderList(); };
+    root.querySelector("#accentSeg").onclick = (e) => {
+      const b = e.target.closest("button[data-acc]");
+      if (!b) return;
+      ui.accent = b.dataset.acc;
+      setPref("accent", ui.accent);
+      root.querySelectorAll("#accentSeg button").forEach((x) => x.setAttribute("aria-pressed", x === b));
+      sayWord("pronunciation");
+    };
     root.querySelector("#wordFilter").onclick = (e) => {
       const b = e.target.closest("button[data-f]");
       if (!b) return;
@@ -399,12 +500,27 @@
       box.innerHTML = `<tbody><tr><td class="empty-row">${list().length ? "Không có từ nào ở đây. Thử bộ lọc khác." : "Sổ từ vựng còn trống. Mở một video, bấm vào một từ trong phụ đề (hoặc gõ vào ô dưới video) rồi chọn ⭐ Lưu từ."}</td></tr></tbody>`;
       return;
     }
+    // Families together: in the order the family first appears, members one after another.
+    const fams = new Map();
+    let rows = items;
+    if (ui.group) {
+      items.forEach((w) => { const k = famKey(w); fams.set(k, [...(fams.get(k) || []), w]); });
+      rows = [...fams.values()].flat();
+    }
+    const famHead = (w, i) => {
+      if (!ui.group) return "";
+      const m = fams.get(famKey(w));
+      if (m.length < 2 || m[0] !== w) return "";
+      return `<tr class="fam-row"><td colspan="6"><span class="fam-ic" aria-hidden="true">🧩</span> <b>Họ từ</b>
+        ${m.map((x) => `<span class="fam-w">${esc(x.word)}${x.pos ? ` <i>${esc(x.pos)}</i>` : ""}</span>`).join('<span class="fam-dot">·</span>')}
+        <span class="muted small">· học cùng nhau, ôn cùng ngày</span></td></tr>`;
+    };
     box.innerHTML = `<thead><tr><th>Từ</th><th>Dạng từ · Phiên âm</th><th>Nghe · Nói thử</th><th>Nghĩa (Oxford)</th><th>Nghĩa tiếng Việt</th><th>3 câu ví dụ thông dụng</th></tr></thead><tbody>` +
-      items.map((w) => `<tr data-id="${w.id}">
+      rows.map((w, i) => famHead(w, i) + `<tr data-id="${w.id}"${ui.group && fams.get(famKey(w)).length > 1 ? ' class="in-fam"' : ""}>
         <td data-label="Từ"><b class="wc-word">${esc(w.word)}</b>${w.form && w.form.toLowerCase() !== w.word.toLowerCase() ? `<small class="wc-form" title="Dạng bạn đã gặp">từ “${esc(w.form)}”</small>` : ""}
           <div class="wc-meta">${stageBadge(w, todayIds)}</div>
           ${w.sourceUrl ? `<a class="wc-src" href="${esc(w.sourceUrl)}" target="_blank" rel="noopener" title="${esc(w.sourceTitle || "")}">${w.sourceKind === "video" ? "▶ " + (w.time != null ? fmtT(w.time) : "video") : "↗ nguồn"}</a>` : ""}
-          <span class="wc-row-acts"><button type="button" class="wc-edit" data-a="edit" title="Sửa từ" aria-label="Sửa từ">✏️</button><button type="button" class="wc-del" data-a="del" title="Xóa từ" aria-label="Xóa từ">🗑</button></span></td>
+          <span class="wc-row-acts"><button type="button" class="wc-edit" data-a="fam" title="Từ cùng họ" aria-label="Từ cùng họ">🧩</button><button type="button" class="wc-edit" data-a="edit" title="Sửa từ" aria-label="Sửa từ">✏️</button><button type="button" class="wc-del" data-a="del" title="Xóa từ" aria-label="Xóa từ">🗑</button></span></td>
         <td data-label="Dạng từ · Phiên âm">${w.pos ? `<span class="chip">${esc(w.pos)}</span>` : ""}<div class="wc-ipa">${esc(w.ipa || "")}</div></td>
         <td data-label="Nghe · Nói thử"><div class="wc-acts">
           <button type="button" class="btn small" data-a="say" title="Nghe từ">🔊 Nghe</button>
@@ -417,18 +533,63 @@
           .map((x, i) => `<li${x.mine ? ' class="mine" title="Câu bạn gặp từ này"' : ""}><button type="button" class="ex-say" data-a="ex" data-i="${i}" aria-label="Nghe câu">🔊</button> ${mark(w, x.t)}${x.src ? ` <span class="ex-src">${x.src}</span>` : ""}</li>`).join("") || '<li class="muted">Đang tìm câu ví dụ…</li>'}</ol></td>
       </tr>`).join("") + "</tbody>";
     box.onclick = (e) => {
+      if (e.target.closest(".fam-sug")) return famSugClick(e);
       const b = e.target.closest("[data-a]");
       if (!b) return;
       const row = b.closest("tr");
       const w = list().find((x) => x.id === row.dataset.id);
       if (!w) return;
       const exs = [...(w.context ? [w.context] : []), ...(w.examples || [])].slice(0, 3);
-      if (b.dataset.a === "say") SE.say(w.word);
+      if (b.dataset.a === "say") sayWord(w.word);
       else if (b.dataset.a === "ex") SE.say(exs[+b.dataset.i] || w.word);
       else if (b.dataset.a === "speak") sayIt(w, b, row.querySelector(".wc-score"));
       else if (b.dataset.a === "edit") openEditor(row, w);
+      else if (b.dataset.a === "fam") openFamily(row, w);
       else if (b.dataset.a === "del" && confirm(`Xóa “${w.word}” khỏi Sổ từ vựng?`)) { saveList(list().filter((x) => x.id !== w.id)); render(); }
     };
+  }
+  // 🧩: the word's family. Saved members ✓, other common members with ＋ to save them into this family,
+  // and "Tách khỏi họ" when the automatic match is wrong.
+  async function openFamily(row, w) {
+    const open = row.nextElementSibling?.classList.contains("fam-sug") ? row.nextElementSibling : null;
+    if (open) { open.remove(); return; }
+    document.querySelectorAll("#wordsList .fam-sug").forEach((x) => x.remove());
+    const tr = document.createElement("tr");
+    tr.className = "fam-sug";
+    tr.dataset.for = w.id;
+    tr.innerHTML = `<td colspan="6"><span class="muted small">🧩 Đang tìm các từ cùng họ với “${esc(w.word)}”…</span></td>`;
+    row.after(tr);
+    const all = list();
+    const mates = siblings(w, all);
+    const have = new Set(all.map((x) => x.word.toLowerCase()));
+    const sug = (await suggestFamily(w)).filter((x) => x.word !== w.word.toLowerCase());
+    if (!tr.isConnected) return;
+    const chips = [
+      ...mates.map((x) => `<span class="fam-chip have">✓ ${esc(x.word)}${x.pos ? ` <i>${esc(x.pos)}</i>` : ""}</span>`),
+      ...sug.filter((x) => !mates.some((m) => m.word.toLowerCase() === x.word)).map((x) => have.has(x.word)
+        ? `<span class="fam-chip have" title="Đã có trong sổ, ở họ khác">✓ ${esc(x.word)}</span>`
+        : `<button type="button" class="fam-chip add" data-add="${esc(x.word)}" title="Lưu vào sổ, cùng họ với ${esc(w.word)}">＋ ${esc(x.word)}${x.pos.length ? ` <i>${x.pos.map((p) => POS_VI[p]).join(", ")}</i>` : ""}</button>`),
+    ];
+    tr.innerHTML = `<td colspan="6"><div class="fam-box"><b>🧩 Họ từ của “${esc(w.word)}”</b>
+      <div class="fam-chips">${chips.join("") || `<span class="muted small">Chưa tìm thấy từ cùng họ thông dụng.</span>`}</div>
+      <div class="fam-foot">${mates.length ? `<button type="button" class="btn small ghost" data-split>Tách “${esc(w.word)}” khỏi họ này</button>` : ""}
+        ${w.familyKey === w.word.toLowerCase() ? `<button type="button" class="btn small ghost" data-join>Gom lại theo họ tự động</button>` : ""}
+        <span class="muted small">Bấm ＋ để lưu từ đó vào sổ; các từ cùng họ được học và ôn cùng ngày.</span></div></div></td>`;
+  }
+  async function famSugClick(e) {
+    const tr = e.target.closest(".fam-sug");
+    const w = list().find((x) => x.id === tr.dataset.for);
+    if (!w) return;
+    const add = e.target.closest("[data-add]");
+    if (add) {
+      add.disabled = true;
+      await save({ word: add.dataset.add, familyKey: famKey(w) });
+    } else if (e.target.closest("[data-split]")) {
+      update(w.id, { familyKey: w.word.toLowerCase() });
+      toast(`Đã tách “${w.word}” khỏi họ từ`);
+    } else if (e.target.closest("[data-join]")) {
+      update(w.id, { familyKey: null });
+    }
   }
   function openEditor(row, w) {
     const cell = row.cells[0];
@@ -507,12 +668,13 @@
       ${R.shown ? `<div class="muted">${esc([w.pos, w.ipa].filter(Boolean).join(" · "))}</div>
           ${w.meaningVi ? `<div class="wc-mean">${esc(w.meaningVi)}</div>` : ""}${w.defEn ? `<div class="wc-def">${esc(w.defEn)}</div>` : ""}
           ${exs.length ? `<ol class="wc-exs">${exs.map((s) => `<li>${mark(w, s)}</li>`).join("")}</ol>` : ""}
+          ${siblings(w).length ? `<div class="flash-fam">🧩 Cùng họ: ${siblings(w).map((x) => `<b>${esc(x.word)}</b>${x.pos ? ` <i>${esc(x.pos)}</i>` : ""}${x.meaningVi ? ` – ${esc(x.meaningVi.split(/[;,]/)[0])}` : ""}`).join(" · ")}</div>` : ""}
           <div class="toolbar flash-acts"><button class="btn" data-again>😕 Chưa nhớ</button><button class="btn primary" data-good>🙂 Nhớ rồi</button></div>`
         : `${exs[0] ? `<div class="wc-ctx">“${blank(exs[0])}”</div>` : ""}
           <div class="hint small">Nhớ nghĩa của từ này không? Thử nói một câu với từ này, rồi bấm Hiện nghĩa.</div>
           <div class="toolbar flash-acts"><button class="btn primary" data-show>Hiện nghĩa</button></div>`}
     </div>`;
-    box.querySelector("[data-say]").onclick = () => SE.say(w.word);
+    box.querySelector("[data-say]").onclick = () => sayWord(w.word);
     box.querySelector("[data-show]")?.addEventListener("click", () => { R.shown = true; renderReview(); });
     const answer = (ok) => {
       const now = Date.now();
@@ -521,7 +683,9 @@
         // New word: today is its learning day. Otherwise the next step of the 1/3/7/14/30-day schedule.
         const learnedAt = w.stage === 0 ? now : w.learnedAt;
         const stage = Math.min(w.stage + 1, MASTERED);
-        patch = { stage, learnedAt, lastReview: now, due: stage >= MASTERED ? null : pickDay(learnedAt, stage, w.id) };
+        // A family member already answered today at the same step → the same review day, so they stay together.
+        const mate = siblings(w).find((x) => x.stage === stage && x.due != null && reviewedToday(x));
+        patch = { stage, learnedAt, lastReview: now, due: stage >= MASTERED ? null : mate ? mate.due : pickDay(learnedAt, stage, w.id) };
       } else if (ok) {
         // Forgot earlier today, remembered now: today is the new learning day.
         patch = { stage: 1, learnedAt: now, lastReview: now, due: pickDay(now, 1, w.id) };
@@ -556,6 +720,6 @@
   });
   document.addEventListener("se:synced", () => { updateNav(); if (!$("view-words").hidden && !ui.review) render(); });
 
-  window.SE_WORDS = { save, popover };
+  window.SE_WORDS = { save, popover, sayWord };
   updateNav();
 })();

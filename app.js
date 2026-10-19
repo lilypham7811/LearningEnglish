@@ -1357,6 +1357,7 @@ Name2: English sentence | Vietnamese translation`;
     log.forEach((x) => { const t = byTopic[x.dialogId] ||= { name: x.titleVi || x.title, s: 0, n: 0 }; t.s += x.seconds; t.n++; });
     const top = Object.values(byTopic).sort((a, b) => b.s - a.s).slice(0, 7);
     const max = top[0]?.s || 1;
+    const pillColor = (i) => `var(--r${[5, 4, 2, 7, 1, 6, 3][i % 7]})`;
     $("topTopics").innerHTML = top.length
       ? top.map((t, i) => `<div class="lg" style="--pc:${pillColor(i)}"><span class="lg-name">${esc(t.name)}</span><span class="lg-bar"><i style="width:${Math.max(4, (t.s / max) * 100)}%"></i></span><span class="lg-n">${fmtDur(t.s)}</span></div>`).join("")
       : `<p class="hint">Chưa có dữ liệu. Mở một chủ đề và bắt đầu luyện nhé!</p>`;
