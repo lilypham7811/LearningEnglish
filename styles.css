@@ -674,3 +674,4 @@ h2 { font-weight: 800; letter-spacing: -0.02em; }
 .words-table .wc-word { overflow-wrap: anywhere; }
 .wc-editor .input { width: 100%; min-width: 9rem; }
 .ex-src { display: inline-block; margin-left: .3rem; padding: 0 .4rem; border-radius: 99px; background: var(--surface-2); color: var(--ink-3); font-size: .68rem; font-weight: 600; vertical-align: .1rem; }
+.chip.st-new { background: var(--turmeric-soft); color: var(--warn); }

@@ -10,8 +10,12 @@
   const $ = (id) => document.getElementById(id);
   const esc = SE.esc;
   const DAY = 86400000;
-  const SCHEDULE = [0, 1, 3, 7, 10, 30]; // stage 0 = the day it is saved; then reviews on these days
-  const MASTERED = SCHEDULE.length;
+  // Stage 0 = new (saved, not learned yet). Learning it = its first review; then reviews 1..5 come
+  // 1, 3, 7, 14 and 30 days after that learning day. After review 5 the word is learned (MASTERED).
+  const OFFSETS = [1, 3, 7, 14, 30];
+  const FUZZ = [0, 1, 2, 3, 3];        // days a review may move (earlier/later) to keep days under the limit
+  const MASTERED = OFFSETS.length + 1;
+  const DAILY = 10;                    // at most 10 words a day: reviews that are due first, then new words
   const ui = { q: "", f: "all", review: null };
 
   const list = () => (SE.safeGet("words") || []).map(upgrade);
@@ -23,16 +27,46 @@
   const toast = (t) => window.SE_LIB?.toast(t);
   const clean = (w) => (w || "").replace(/[’‘]/g, "'").replace(/^[^A-Za-z]+|[^A-Za-z]+$/g, "").trim();
   const startOfDay = (t) => { const d = new Date(t); d.setHours(0, 0, 0, 0); return d.getTime(); };
-  const dueAt = (learnedAt, stage) => (stage >= MASTERED ? Infinity : startOfDay(learnedAt) + SCHEDULE[stage] * DAY);
-  const isDue = (w) => w.stage < MASTERED && w.due <= Date.now();
-  const due = () => list().filter(isDue);
+  const today = () => startOfDay(Date.now());
+  const isDue = (w) => w.stage >= 1 && w.stage < MASTERED && w.due != null && startOfDay(w.due) <= today();
+  const reviewedToday = (w) => w.lastReview && startOfDay(w.lastReview) === today();
+  // Today's list, at most DAILY words including those already reviewed today:
+  // due reviews first (most overdue, then earliest stage), then new words (oldest saved first).
+  function todayQueue(all = list()) {
+    const left = Math.max(0, DAILY - all.filter(reviewedToday).length);
+    const reviews = all.filter((w) => isDue(w) && !reviewedToday(w)).sort((a, b) => a.due - b.due || a.stage - b.stage);
+    const fresh = all.filter((w) => w.stage === 0 && !reviewedToday(w)).sort((a, b) => a.savedAt - b.savedAt);
+    return [...reviews, ...fresh].slice(0, left);
+  }
+  const due = () => todayQueue();
+  // Pick the review day: the planned day (learning day + 1/3/7/14/30), moved up to FUZZ days earlier or
+  // later to the day with the fewest words; if all those days are full, look a few days later.
+  function pickDay(learnedAt, stage, id) {
+    const all = list();
+    const tomorrow = today() + DAY;
+    const target = Math.max(startOfDay(learnedAt) + OFFSETS[stage - 1] * DAY, tomorrow);
+    const loadOn = (day) => all.filter((x) => x.id !== id && x.stage >= 1 && x.stage < MASTERED && x.due != null && startOfDay(x.due) === day).length;
+    const f = FUZZ[stage - 1];
+    let best = null;
+    for (let extra = 0; extra <= 3 && (!best || best.load >= DAILY); extra++) {
+      for (let k = -f; k <= f + extra; k++) {
+        const day = target + k * DAY;
+        if (day < tomorrow) continue;
+        const load = loadOn(day);
+        const score = load * 10 + Math.abs(k); // fewest words first, then closest to the planned day
+        if (!best || score < best.score) best = { day, load, score };
+      }
+    }
+    return best.day;
+  }
   const oxfordUrl = (w) => `https://www.oxfordlearnersdictionaries.com/search/english/?q=${encodeURIComponent(w.toLowerCase())}`;
   // Words saved before the new schedule (box/due, one example) get the new fields.
   function upgrade(w) {
     if (w.stage != null) return w;
     const learnedAt = w.learnedAt || w.savedAt || Date.now();
     const stage = Math.min(w.box || 0, MASTERED);
-    return { ...w, learnedAt, stage, due: dueAt(learnedAt, stage), examples: w.examples || (w.example ? [w.example] : []) };
+    return { ...w, learnedAt, stage, due: stage >= 1 ? startOfDay(learnedAt) + OFFSETS[Math.min(stage, OFFSETS.length) - 1] * DAY : null,
+      examples: w.examples || (w.example ? [w.example] : []) };
   }
 
   // ---------- Saving ----------
@@ -49,7 +83,7 @@
       word: /^[A-Z][a-z]/.test(word) && word !== "I" ? word.toLowerCase() : word,
       context: (raw.context || "").replace(/\s+/g, " ").trim().slice(0, 400),
       sourceKind: raw.sourceKind || "", sourceTitle: raw.sourceTitle || "", sourceUrl: raw.sourceUrl || "", time: raw.time ?? null,
-      savedAt: now, learnedAt: now, stage: 0, due: dueAt(now, 0), examples: [],
+      savedAt: now, learnedAt: null, stage: 0, due: null, examples: [],
     };
     saveList([it, ...items]);
     SE.track("word");
@@ -281,7 +315,7 @@
 
 
   // ---------- Section ----------
-  const STAGE_NAMES = ["Mới", "Ôn ngày 1", "Ôn ngày 3", "Ôn ngày 7", "Ôn ngày 10", "Ôn ngày 30"];
+  const STAGE_NAMES = ["Từ mới", "Ôn sau 1 ngày", "Ôn sau 3 ngày", "Ôn sau 1 tuần", "Ôn sau 2 tuần", "Ôn sau 1 tháng"];
   const dayLabel = (t) => new Date(t).toLocaleDateString("vi-VN", { weekday: "short", day: "2-digit", month: "2-digit" });
   function render() {
     const root = $("view-words");
@@ -291,6 +325,7 @@
         <dl class="stat-list" aria-label="Thống kê sổ từ vựng">
           <div style="--pc:var(--r5)"><dt>Tổng số từ</dt><dd>${all.length}</dd></div>
           <div style="--pc:var(--r1)"><dt>Ôn hôm nay</dt><dd>${due().length}</dd></div>
+          <div style="--pc:var(--turmeric)"><dt>Từ mới chờ học</dt><dd>${all.filter((w) => w.stage === 0).length}</dd></div>
           <div style="--pc:var(--r4)"><dt>Đã thuộc</dt><dd>${mastered}</dd></div>
         </dl></div>
       <div class="panel" id="reviewBox"></div>
@@ -343,19 +378,22 @@
     const i = sentence.toLowerCase().indexOf(word.toLowerCase());
     return i < 0 ? esc(sentence) : esc(sentence.slice(0, i)) + `<mark>${esc(sentence.slice(i, i + word.length))}</mark>` + esc(sentence.slice(i + word.length));
   };
-  function stageBadge(w) {
+  function stageBadge(w, todayIds) {
     if (w.stage >= MASTERED) return `<span class="chip st-done">✓ Đã thuộc</span>`;
-    if (isDue(w)) return `<span class="chip st-due">Ôn hôm nay</span>`;
-    const tomorrow = startOfDay(Date.now()) + DAY;
+    if (todayIds.has(w.id)) return `<span class="chip st-due">Ôn hôm nay</span>`;
+    if (w.stage === 0) return `<span class="chip st-new">Chờ học</span>`;
+    if (isDue(w)) return `<span class="chip">Ôn ngày mai</span>`; // due, but today is already full (10 words)
+    const tomorrow = today() + DAY;
     return `<span class="chip">Ôn ${startOfDay(w.due) === tomorrow ? "ngày mai" : dayLabel(w.due)}</span>`;
   }
   function renderList() {
+    const todayIds = new Set(due().map((w) => w.id));
     const box = $("wordsList");
     if (!box) return;
     const q = ui.q.trim().toLowerCase();
     const items = list().filter((w) =>
       (!q || (w.word + " " + (w.meaningVi || "") + " " + (w.defEn || "")).toLowerCase().includes(q)) &&
-      (ui.f === "all" || (ui.f === "due" && isDue(w)) || (ui.f === "learning" && w.stage < MASTERED) ||
+      (ui.f === "all" || (ui.f === "due" && todayIds.has(w.id)) || (ui.f === "learning" && w.stage < MASTERED) ||
        (ui.f === "mastered" && w.stage >= MASTERED) || (ui.f === "video" && w.sourceKind === "video")));
     if (!items.length) {
       box.innerHTML = `<tbody><tr><td class="empty-row">${list().length ? "Không có từ nào ở đây. Thử bộ lọc khác." : "Sổ từ vựng còn trống. Mở một video, bấm vào một từ trong phụ đề (hoặc gõ vào ô dưới video) rồi chọn ⭐ Lưu từ."}</td></tr></tbody>`;
@@ -364,7 +402,7 @@
     box.innerHTML = `<thead><tr><th>Từ</th><th>Dạng từ · Phiên âm</th><th>Nghe · Nói thử</th><th>Nghĩa (Oxford)</th><th>Nghĩa tiếng Việt</th><th>3 câu ví dụ thông dụng</th></tr></thead><tbody>` +
       items.map((w) => `<tr data-id="${w.id}">
         <td data-label="Từ"><b class="wc-word">${esc(w.word)}</b>${w.form && w.form.toLowerCase() !== w.word.toLowerCase() ? `<small class="wc-form" title="Dạng bạn đã gặp">từ “${esc(w.form)}”</small>` : ""}
-          <div class="wc-meta">${stageBadge(w)}</div>
+          <div class="wc-meta">${stageBadge(w, todayIds)}</div>
           ${w.sourceUrl ? `<a class="wc-src" href="${esc(w.sourceUrl)}" target="_blank" rel="noopener" title="${esc(w.sourceTitle || "")}">${w.sourceKind === "video" ? "▶ " + (w.time != null ? fmtT(w.time) : "video") : "↗ nguồn"}</a>` : ""}
           <span class="wc-row-acts"><button type="button" class="wc-edit" data-a="edit" title="Sửa từ" aria-label="Sửa từ">✏️</button><button type="button" class="wc-del" data-a="del" title="Xóa từ" aria-label="Xóa từ">🗑</button></span></td>
         <td data-label="Dạng từ · Phiên âm">${w.pos ? `<span class="chip">${esc(w.pos)}</span>` : ""}<div class="wc-ipa">${esc(w.ipa || "")}</div></td>
@@ -417,13 +455,15 @@
   // ---------- Daily review (flashcards) ----------
   // "Tiếp theo: ngày mai · 2 từ" (or the first day with words to review).
   function nextReview() {
-    const tomorrow = startOfDay(Date.now()) + DAY;
-    const upcoming = list().filter((w) => w.stage < MASTERED && w.due >= tomorrow);
-    if (!upcoming.length) return list().length ? "Không có từ nào hẹn ôn sắp tới." : "Lưu từ mới để bắt đầu.";
+    const all = list();
+    const tomorrow = today() + DAY;
+    const waiting = all.filter((w) => w.stage === 0).length - due().filter((w) => w.stage === 0).length;
+    const more = waiting > 0 ? ` · còn ${waiting} từ mới chờ học` : "";
+    const upcoming = all.filter((w) => w.stage >= 1 && w.stage < MASTERED && w.due != null && startOfDay(w.due) >= tomorrow);
+    if (!upcoming.length) return (all.length ? "Chưa có từ hẹn ôn." : "Lưu từ mới để bắt đầu.") + more;
     const day = Math.min(...upcoming.map((w) => startOfDay(w.due)));
     const n = upcoming.filter((w) => startOfDay(w.due) === day).length;
-    const when = day === tomorrow ? "ngày mai" : dayLabel(day);
-    return `Tiếp theo: ${when} · ${n} từ`;
+    return `Tiếp theo: ${day === tomorrow ? "ngày mai" : dayLabel(day)} · ${n} từ ôn lại${more}`;
   }
   function renderReview() {
     const box = $("reviewBox");
@@ -433,9 +473,10 @@
       // One line: what to do today and when the next review is. The schedule rule sits behind ⓘ.
       box.innerHTML = `<div class="review-bar">
         <span class="rv-ic" aria-hidden="true">${d.length ? "🃏" : "✓"}</span>
-        <div class="rv-text"><b>${d.length ? `Hôm nay ôn ${d.length} từ` : list().length ? "Hôm nay đã ôn xong" : "Chưa có từ để ôn"}</b>
+        <div class="rv-text"><b>${d.length ? `Hôm nay ôn ${d.length} từ` : list().some(reviewedToday) ? `Hôm nay đã ôn xong (${list().filter(reviewedToday).length} từ)` : list().length ? "Hôm nay không có từ cần ôn" : "Chưa có từ để ôn"}</b>
+          ${d.length ? `<span class="muted small">(${d.filter((w) => w.stage >= 1).length} ôn lại · ${d.filter((w) => w.stage === 0).length} từ mới)</span>` : ""}
           <span class="muted small">${nextReview()}</span>
-          <span class="rv-info" tabindex="0" title="Mỗi từ được ôn vào ngày thứ 1, 3, 7, 10 và 30 sau khi học. Ôn đủ 5 lần là đã thuộc. Bấm “Chưa nhớ” thì từ đó học lại từ đầu." aria-label="Lịch ôn: ngày 1, 3, 7, 10 và 30 sau khi học">ⓘ</span></div>
+          <span class="rv-info" tabindex="0" title="Mỗi ngày tối đa 10 từ: từ đến hạn ôn trước, rồi đến từ mới. Mỗi từ được ôn lại sau 1 ngày, 3 ngày, 1 tuần, 2 tuần và 1 tháng kể từ ngày học (có thể xê dịch 1–3 ngày để không ngày nào quá 10 từ). Ôn đủ 5 lần là đã thuộc. Bấm “Chưa nhớ” thì từ đó học lại từ đầu." aria-label="Lịch ôn: tối đa 10 từ mỗi ngày; ôn lại sau 1, 3, 7, 14 và 30 ngày">ⓘ</span></div>
         <div class="toolbar">${d.length ? `<button class="btn primary" data-start>Bắt đầu ôn</button>` : ""}
           ${list().length ? `<button class="btn" data-voice>🎙️ Ôn bằng giọng nói</button>` : ""}</div>
       </div>`;
@@ -445,7 +486,7 @@
         window.SE_HANDOFF.open({ title: `Ôn ${words.length} từ`, prompt: window.SE_HANDOFF.wordsPrompt(words) });
       });
       box.querySelector("[data-start]")?.addEventListener("click", () => {
-        ui.review = { queue: d.sort((a, b) => a.due - b.due).map((w) => w.id), shown: false, done: 0, again: new Set() };
+        ui.review = { queue: d.map((w) => w.id), shown: false, done: 0, again: new Set() };
         renderReview();
       });
       return;
@@ -477,15 +518,15 @@
       const now = Date.now();
       let patch;
       if (ok && !R.again.has(w.id)) {
+        // New word: today is its learning day. Otherwise the next step of the 1/3/7/14/30-day schedule.
+        const learnedAt = w.stage === 0 ? now : w.learnedAt;
         const stage = Math.min(w.stage + 1, MASTERED);
-        // Next review on the schedule day; if days were missed, no earlier than tomorrow.
-        const next = stage >= MASTERED ? null : Math.max(dueAt(w.learnedAt, stage), startOfDay(now) + DAY);
-        patch = { stage, due: next };
+        patch = { stage, learnedAt, lastReview: now, due: stage >= MASTERED ? null : pickDay(learnedAt, stage, w.id) };
       } else if (ok) {
-        // Forgot earlier today, remembered now: today counts as day 0 of the restarted schedule.
-        patch = { stage: 1, due: dueAt(w.learnedAt, 1) };
+        // Forgot earlier today, remembered now: today is the new learning day.
+        patch = { stage: 1, learnedAt: now, lastReview: now, due: pickDay(now, 1, w.id) };
       } else {
-        patch = { stage: 0, learnedAt: now, due: dueAt(now, 0) };
+        patch = { stage: 0, learnedAt: null, lastReview: now, due: null };
         R.again.add(w.id);
       }
       update(w.id, patch);
