@@ -32,7 +32,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&display=swap" />
-  <link rel="stylesheet" href="styles.css?v=33" />
+  <link rel="stylesheet" href="styles.css?v=34" />
 </head>
 <body>
 <div class="shell">
@@ -340,6 +340,43 @@
   </form>
 </dialog>
 
+<!-- Words from a sentence (paste / Share menu) -->
+<dialog id="pickDlg" class="sheet">
+  <form method="dialog">
+    <h3>⭐ Chọn từ để lưu</h3>
+    <p class="hint small">Bấm vào từ muốn lưu, chọn được nhiều từ. Bấm các từ liền nhau để lưu cả cụm (ví dụ <i>take off</i>). Câu này được giữ làm câu ví dụ.</p>
+    <div id="pickWords" class="pick-words"></div>
+    <div class="sheet-actions"><button value="cancel" class="btn" formnovalidate>Hủy</button><button id="pickSave" type="button" class="btn primary" disabled>Chọn từ để lưu</button></div>
+  </form>
+</dialog>
+
+<!-- How to save words on the phone -->
+<dialog id="phoneDlg" class="sheet">
+  <form method="dialog">
+    <h3>📱 Lưu từ trên điện thoại</h3>
+    <h4>Cách 1 · Chép rồi dán (không cần cài gì)</h4>
+    <ol class="steps">
+      <li>Ở app bất kỳ (Safari, YouTube, Kindle, Mail…), giữ ngón tay lên từ → <b>Chép</b>. Chép cả câu cũng được.</li>
+      <li>Mở app S → <b>Sổ từ vựng</b> → bấm <b>📋 Dán</b>. iPhone hỏi thì bấm <b>Dán</b>.</li>
+      <li>Nếu đã chép cả câu: bấm vào từ muốn lưu. Câu đó thành câu ví dụ.</li>
+    </ol>
+    <h4>Cách 2 · Nút “Lưu vào Sổ từ vựng” trong menu Chia sẻ (iPhone, làm 1 lần, khoảng 2 phút)</h4>
+    <ol class="steps">
+      <li>Mở app <b>Phím tắt</b> (Shortcuts) → bấm <b>＋</b>.</li>
+      <li>Bấm tên ở trên cùng, đặt tên <b>Lưu vào Sổ từ vựng</b>. Bấm <b>ⓘ</b> → bật <b>Hiển thị trong Bảng chia sẻ</b> (Show in Share Sheet).</li>
+      <li>Thêm tác vụ <b>Mã hóa URL</b> (URL Encode), đầu vào là <b>Đầu vào phím tắt</b> (Shortcut Input).</li>
+      <li>Thêm tác vụ <b>Mở URL</b> (Open URLs). Dán địa chỉ dưới đây vào ô URL, rồi chèn biến <b>Văn bản được mã hóa URL</b> (URL Encoded Text) ngay sau dấu <code>=</code>.
+        <div class="copy-row"><code id="shareUrl"></code><button type="button" class="btn small" id="copyShareUrl">Chép</button></div></li>
+      <li>Bấm <b>Xong</b>. Từ giờ: chọn một từ hoặc câu ở Safari → <b>Chia sẻ</b> → <b>Lưu vào Sổ từ vựng</b>. Chia sẻ một video YouTube hay bài báo cũng được.</li>
+    </ol>
+    <p class="hint small">⚠ Phím tắt mở trang bằng <b>Safari</b>, không phải app S, mà Safari giữ dữ liệu riêng. Để từ tự sang app S: mở trang này trong Safari một lần → <b>Cài đặt</b> → dán <b>cùng mã đồng bộ</b> như trong app S.
+      <br /><span id="phoneSyncState"></span></p>
+    <h4>Điện thoại Android</h4>
+    <p class="hint small">Cài app (menu Chrome → <b>Thêm vào màn hình chính</b>). Sau đó chọn từ hoặc video → <b>Chia sẻ</b> → <b>Shadow English</b>.</p>
+    <div class="sheet-actions"><button class="btn primary">Xong</button></div>
+  </form>
+</dialog>
+
 <!-- Settings -->
 <dialog id="settings" class="sheet">
   <form method="dialog">
@@ -408,13 +445,13 @@
   </form>
 </dialog>
 
-<script src="dialogs.js?v=33"></script>
-<script src="app.js?v=33"></script>
-<script src="live.js?v=33"></script>
-<script src="library.js?v=33"></script>
-<script src="words.js?v=33"></script>
-<script src="handoff.js?v=33"></script>
-<script src="voice.js?v=33"></script>
-<script src="sync.js?v=33"></script>
+<script src="dialogs.js?v=34"></script>
+<script src="app.js?v=34"></script>
+<script src="live.js?v=34"></script>
+<script src="library.js?v=34"></script>
+<script src="words.js?v=34"></script>
+<script src="handoff.js?v=34"></script>
+<script src="voice.js?v=34"></script>
+<script src="sync.js?v=34"></script>
 </body>
 </html>

@@ -693,3 +693,15 @@ h2 { font-weight: 800; letter-spacing: -0.02em; }
 .fam-foot { display: flex; flex-wrap: wrap; align-items: center; gap: .6rem; }
 .flash-fam { margin-top: .4rem; font-size: .92rem; color: var(--ink-2); }
 @media (max-width: 760px) { .words-table tr.fam-row, .words-table tr.fam-sug { padding: 0; } .words-table tr.fam-row td, .words-table tr.fam-sug td { padding: .5rem .9rem !important; } }
+
+/* Saving words on the phone */
+.pick-words { line-height: 2.1; font-size: 1.05rem; padding: .6rem .8rem; border-radius: .7rem; background: var(--surface-2); max-height: 50vh; overflow: auto; }
+.pick-w { font: inherit; border: 1px solid transparent; background: none; padding: .05rem .2rem; border-radius: .35rem; cursor: pointer; color: var(--ink); }
+.pick-w:hover { border-color: var(--line); }
+.pick-w[aria-pressed="true"] { background: var(--turmeric-soft); border-color: var(--turmeric); font-weight: 700; }
+#pickSave { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#phoneDlg h4 { margin: 1rem 0 .3rem; font-size: .95rem; }
+#phoneDlg .steps { margin: 0; padding-left: 1.3rem; font-size: .92rem; color: var(--ink-2); }
+#phoneDlg .steps li { margin: .3rem 0; }
+.copy-row { display: flex; align-items: center; gap: .5rem; margin-top: .35rem; padding: .4rem .6rem; border-radius: .5rem; background: var(--surface-2); }
+.copy-row code { flex: 1; min-width: 0; overflow-wrap: anywhere; font-size: .8rem; }

@@ -6,6 +6,8 @@
 // After the last one it is "đã thuộc". "Chưa nhớ" starts the schedule again from today.
 // Word families (metabolism, metabolic, metabolize) sit together in the table and are learned on the same day.
 // "Nghe" plays Oxford Learner's Dictionaries' own recording of the word.
+// On the phone: 📋 Dán (a word or sentence copied in any app), the iPhone Share menu shortcut (#share=)
+// and the Android Share menu; a sentence opens a picker to choose which words to keep.
 (() => {
   "use strict";
   const SE = window.SE;
@@ -196,7 +198,9 @@
       // No key: Google's dictionary (Vietnamese meanings, Oxford Languages definitions and examples, base form),
       // topped up with IPA from the free English dictionary and everyday examples from Tatoeba.
       const g = await googleDict(it.word).catch(() => null);
-      const base = keepWord ? it.word : (g?.base || it.word);
+      // A phrase keeps its words: "take off" must not become the noun "takeoff" ("took off" → "take off" is fine).
+      const phraseOk = (b) => b && (!/\s/.test(it.word) || /\s/.test(b));
+      const base = keepWord || !phraseOk(g?.base) ? it.word : g.base;
       const [f, t] = await Promise.all([freeDictionary(base.toLowerCase()).catch(() => null), tatoeba(base).catch(() => [])]);
       if (g || f) {
         // Examples: one from Oxford first, then everyday sentences from Tatoeba, then the rest of Oxford's.
@@ -217,7 +221,8 @@
     const lemma = (patch.lemma || "").trim();
     delete patch.lemma;
     patch.lemmaChecked = true;
-    if (!keepWord && lemma && lemma.toLowerCase() !== it.word.toLowerCase() && /^[a-z][a-z' -]*$/i.test(lemma)) {
+    if (!keepWord && lemma && lemma.toLowerCase() !== it.word.toLowerCase() && /^[a-z][a-z' -]*$/i.test(lemma) &&
+        (!/\s/.test(it.word) || /\s/.test(lemma))) {
       const twin = list().find((x) => x.id !== id && x.word.toLowerCase() === lemma.toLowerCase());
       if (twin) {
         saveList(list().filter((x) => x.id !== id));
@@ -421,6 +426,7 @@
           <span class="cmd-ic" aria-hidden="true">＋</span>
           <input class="cmd-input" name="w" placeholder="Thêm từ mới: laudable" autocomplete="off" aria-label="Thêm từ mới" />
           <button class="btn primary">Thêm</button>
+          <button type="button" class="btn ghost" id="wordPaste" title="Dán từ hoặc câu đã chép ở app khác">📋 Dán</button>
         </form>
         <div class="search"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5 14 14"/></svg>
           <input class="input" type="search" id="wordSearch" placeholder="Tìm trong sổ…" value="${esc(ui.q)}" /></div>
@@ -429,6 +435,7 @@
         <div class="seg" id="wordFilter">${[["all", "Tất cả"], ["due", "Ôn hôm nay"], ["learning", "Đang học"], ["mastered", "Đã thuộc"], ["video", "Từ video"]]
           .map(([k, l]) => `<button data-f="${k}" aria-pressed="${ui.f === k}">${l}</button>`).join("")}</div>
         <div class="words-opts">
+          <button type="button" class="btn ghost small" id="phoneHelp">📱 Lưu từ trên điện thoại</button>
           <label class="fam-toggle"><input type="checkbox" id="famToggle" ${ui.group ? "checked" : ""} /> 🧩 Gom theo họ từ</label>
           <div class="seg seg-sm" id="accentSeg" title="Giọng đọc từ: bản ghi âm của từ điển Oxford">${[["gb", "🔊 Giọng Anh"], ["us", "Giọng Mỹ"]]
             .map(([k, l]) => `<button data-acc="${k}" aria-pressed="${ui.accent === k}">${l}</button>`).join("")}</div>
@@ -436,7 +443,16 @@
         ${SE.geminiKey() && all.some((w) => w.dictSource !== "oxford") ? `<button class="btn ghost" id="oxfordAll">🔄 Lấy nghĩa Oxford cho các từ cũ</button>` : ""}
       </div>
       <div class="panel words-table-wrap"><div class="table-scroll"><table class="lib words-table" id="wordsList"></table></div></div>`;
-    root.querySelector("#wordAdd").onsubmit = (e) => { e.preventDefault(); const v = e.target.w.value.trim(); if (v) { save({ word: v }); e.target.w.value = ""; } };
+    root.querySelector("#wordAdd").onsubmit = (e) => { e.preventDefault(); const v = e.target.w.value.trim(); if (v) { fromText(v); e.target.w.value = ""; } };
+    // 📋 Dán: what was copied in another app. iPhone asks once with a small "Dán" bubble.
+    root.querySelector("#wordPaste").onclick = async () => {
+      let t = "";
+      try { t = await navigator.clipboard.readText(); } catch { /* not allowed here */ }
+      if (t.trim()) return fromText(t);
+      root.querySelector("#wordAdd input").focus();
+      toast("Chưa đọc được chữ đã chép. Giữ ngón tay vào ô “Thêm từ mới”, chọn Dán, rồi bấm Thêm.");
+    };
+    root.querySelector("#phoneHelp").onclick = openPhoneHelp;
     root.querySelector("#wordSearch").oninput = (e) => { ui.q = e.target.value; renderList(); };
     root.querySelector("#famToggle").onchange = (e) => { ui.group = e.target.checked; setPref("wordsGroup", ui.group ? "1" : "0"); renderList(); };
     root.querySelector("#accentSeg").onclick = (e) => {
@@ -548,6 +564,69 @@
       else if (b.dataset.a === "del" && confirm(`Xóa “${w.word}” khỏi Sổ từ vựng?`)) { saveList(list().filter((x) => x.id !== w.id)); render(); }
     };
   }
+  // ---------- Text from the phone (paste, Share menu) ----------
+  // One word or a short phrase ("take off") is saved straight away. A longer text opens the picker:
+  // tap the words to keep (words next to each other become one phrase); the sentence is kept as the example.
+  const WORD_RE = /([A-Za-z]+(?:['’-][A-Za-z]+)*)/;
+  function fromText(text, src = {}) {
+    const t = (text || "").replace(/\s+/g, " ").trim();
+    const words = t.split(WORD_RE).filter((x, i) => i % 2);
+    if (!words.length) return toast("Không thấy từ tiếng Anh nào để lưu.");
+    if (words.length <= 3 && t.length <= 40 && /^[A-Za-z'’ -]+[.!?,;:]?$/.test(t)) return save({ word: t, ...src }).then((it) => { if (it) showWords(); return it; });
+    openPicker(t.slice(0, 600), src);
+  }
+  function showWords() { if ($("view-words").hidden) SE.showView("words"); }
+  function openPicker(text, src) {
+    const dlg = $("pickDlg"), box = $("pickWords"), btn = $("pickSave");
+    const parts = text.split(WORD_RE); // odd indices are words
+    const sel = new Set();
+    box.innerHTML = parts.map((x, i) => i % 2 ? `<button type="button" class="pick-w" data-i="${i}" aria-pressed="false">${esc(x)}</button>` : esc(x)).join("");
+    // Selected words next to each other (only spaces between) form one phrase.
+    const runs = () => {
+      const out = [];
+      [...sel].sort((a, b) => a - b).forEach((i) => {
+        const last = out[out.length - 1];
+        if (last && last.end === i - 2 && /^ +$/.test(parts[i - 1])) { last.text += " " + parts[i]; last.end = i; }
+        else out.push({ text: parts[i], end: i });
+      });
+      return out.map((r) => r.text);
+    };
+    const refresh = () => {
+      const r = runs();
+      btn.disabled = !r.length;
+      btn.textContent = r.length ? `⭐ Lưu: ${r.join(" · ")}` : "Chọn từ để lưu";
+    };
+    box.onclick = (e) => {
+      const b = e.target.closest(".pick-w");
+      if (!b) return;
+      const i = +b.dataset.i;
+      sel.has(i) ? sel.delete(i) : sel.add(i);
+      b.setAttribute("aria-pressed", sel.has(i));
+      refresh();
+    };
+    btn.onclick = async () => {
+      const r = runs();
+      dlg.close();
+      for (const w of r) await save({ ...src, word: w, context: text });
+      showWords();
+    };
+    refresh();
+    dlg.showModal();
+  }
+  function openPhoneHelp() {
+    const dlg = $("phoneDlg");
+    const url = location.origin + location.pathname + "#share=";
+    $("shareUrl").textContent = url;
+    $("copyShareUrl").onclick = async () => {
+      try { await navigator.clipboard.writeText(url); toast("Đã chép địa chỉ. Dán vào ô URL của tác vụ Mở URL."); }
+      catch { toast("Chưa chép được. Giữ ngón tay lên địa chỉ để chép."); }
+    };
+    $("phoneSyncState").innerHTML = SE.safeGet("syncToken")
+      ? "✓ Trình duyệt này đã bật đồng bộ: từ lưu ở đây sẽ tự sang các máy khác."
+      : "⚠ Trình duyệt này <b>chưa</b> bật đồng bộ.";
+    dlg.showModal();
+  }
+
   // 🧩: the word's family. Saved members ✓, other common members with ＋ to save them into this family,
   // and "Tách khỏi họ" when the automatic match is wrong.
   async function openFamily(row, w) {
@@ -720,6 +799,6 @@
   });
   document.addEventListener("se:synced", () => { updateNav(); if (!$("view-words").hidden && !ui.review) render(); });
 
-  window.SE_WORDS = { save, popover, sayWord };
+  window.SE_WORDS = { save, popover, sayWord, fromText };
   updateNav();
 })();

@@ -1205,8 +1205,39 @@
     if (Array.isArray(payload?.items)) receive(payload.items);
   }
   window.addEventListener("hashchange", takeFromAddress);
+
+  // ---------- Shared from the phone ----------
+  // iPhone: the "Lưu vào Sổ từ vựng" shortcut in the Share menu opens …/#share=<text or link>.
+  // Android: the installed app is in the Share menu (share_target in the manifest): ?share_text=…&share_url=…
+  // A YouTube link → saved video; a link alone → saved article; any other text → words (with a picker).
+  function takeShared() {
+    let text = "", url = "", title = "";
+    if (location.hash.startsWith("#share=")) {
+      const raw = location.hash.slice(7);
+      try { text = decodeURIComponent(raw); } catch { text = raw; }
+    }
+    const q = new URLSearchParams(location.search);
+    if (q.has("share_text") || q.has("share_url") || q.has("share_title")) {
+      text = q.get("share_text") || ""; url = q.get("share_url") || ""; title = q.get("share_title") || "";
+      ["share_text", "share_url", "share_title"].forEach((k) => q.delete(k));
+    }
+    if (!text.trim() && !url) return;
+    history.replaceState(null, "", location.pathname + (q.toString() ? "?" + q : ""));
+    const link = url || (text.match(/https?:\/\/\S+/) || [""])[0];
+    const rest = text.replace(link, "").replace(/\s+/g, " ").trim();
+    if (link && (youtubeId(link) || !rest)) addItem({ url: link, title: title || rest }, { open: true, undo: true });
+    else window.SE_WORDS?.fromText(rest, link && !isPrivatePage(link) ? { sourceKind: "article", sourceUrl: link, sourceTitle: title } : {});
+    // Opened by the iPhone shortcut = Safari, which keeps its own copy of the data, separate from the S app.
+    const standalone = navigator.standalone || matchMedia("(display-mode: standalone)").matches;
+    if (!standalone && !SE.safeGet("syncToken")) {
+      setTimeout(() => toast("Đã lưu trong Safari. Để tự sang app S, dán mã đồng bộ vào Cài đặt ở đây (giống trong app S).",
+        { label: "Mở Cài đặt", run: SE.openSettings }), 2600);
+    }
+  }
+  window.addEventListener("hashchange", takeShared);
   // Wait until every script (the word list too) has loaded.
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", takeFromAddress); else takeFromAddress();
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", takeShared); else takeShared();
   window.addEventListener("message", (e) => {
     if (e.source !== window || e.data?.source !== "se-ext" || !Array.isArray(e.data.items)) return;
     receive(e.data.items);
