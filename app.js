@@ -70,19 +70,46 @@
     }
     return speakDevice(text, voice, rate, onWord);
   }
+  // iPhone/iPad Safari: (1) the device voice is muted by the side silent switch unless the page asks for
+  // "playback" sound (Safari 17+; set back to "auto" before listening to the microphone); (2) a sentence started
+  // right after another was stopped is often dropped, so wait a moment then; (3) if it still doesn't start,
+  // say what to check instead of staying silent.
+  const isIOS = /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  const audioSession = (type) => { try { if (navigator.audioSession) navigator.audioSession.type = type; } catch { /* older Safari */ } };
+  // Any microphone use (recording, Gemini Live, scoring) switches back to normal sound mode first.
+  if (isIOS && navigator.mediaDevices?.getUserMedia) {
+    const getMic = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
+    navigator.mediaDevices.getUserMedia = (c) => { audioSession("auto"); return getMic(c); };
+  }
+  let cutAt = 0, hinted = false;
+  function cancelSpeech() {
+    if (synth.speaking || synth.pending) cutAt = Date.now();
+    synth.cancel();
+  }
   function speakDevice(text, voice, rate, onWord) {
     return new Promise((resolve) => {
       const u = new SpeechSynthesisUtterance(text);
       if (voice) { u.voice = voice; u.lang = voice.lang; } else u.lang = "en-US";
       u.rate = rate;
+      let started = false;
+      u.onstart = () => { started = true; };
       u.onboundary = (e) => { if (onWord && e.name !== "sentence") onWord(e.charIndex); };
       u.onend = u.onerror = () => resolve();
-      synth.speak(u);
+      const go = () => {
+        if (isIOS) audioSession("playback");
+        synth.speak(u);
+        if (isIOS) setTimeout(() => {
+          if (started || synth.speaking) return;
+          if (!hinted) { hinted = true; window.SE_LIB?.toast("🔇 Không phát được tiếng? Gạt nút im lặng bên hông iPhone sang bật chuông và tăng âm lượng, rồi bấm lại."); }
+          resolve();
+        }, 2500);
+      };
+      if (isIOS && Date.now() - cutAt < 300) setTimeout(go, 250); else go();
     });
   }
   function stopAll() {
     state.playToken++;
-    synth.cancel();
+    cancelSpeech();
     window.SE_VOICE?.stop();
     document.querySelectorAll(".line.active").forEach((el) => el.classList.remove("active"));
     clearWordHighlight();
@@ -90,7 +117,7 @@
   const voiceFor = (i) => (state.dialog.lines[i][0] === 0 ? state.voiceA : state.voiceB);
 
   async function playLine(i, rate = state.rate, token = ++state.playToken) {
-    synth.cancel();
+    cancelSpeech();
     const li = $("dialog").children[i];
     document.querySelectorAll(".line.active").forEach((el) => el.classList.remove("active"));
     li?.classList.add("active");
@@ -105,7 +132,7 @@
 
   // Speak any text in the voice of line i's speaker (chunks, role-play). Resolves false if cancelled.
   async function say(text, i, rate = state.rate, token = ++state.playToken) {
-    synth.cancel();
+    cancelSpeech();
     await speak(text, voiceFor(i), rate);
     return token === state.playToken;
   }
@@ -132,6 +159,7 @@
   // One-shot speech recognition for a single sentence.
   // Resolves { text, error, action }; state.listening.end(action) stops it early.
   function listenOnce(maxMs, target, onInterim) {
+    if (isIOS) audioSession("auto"); // "playback" would block the microphone
     return new Promise((resolve) => {
       const r = new Recognition();
       r.lang = "en-US";
@@ -853,6 +881,7 @@ Name2: English sentence | Vietnamese translation`;
   }
 
   function startRecognition(rec) {
+    if (isIOS) audioSession("auto");
     const r = new Recognition();
     r.lang = "en-US";
     r.interimResults = true;

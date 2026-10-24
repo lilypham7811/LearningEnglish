@@ -101,6 +101,7 @@
   async function sayWord(word) {
     const w = (word || "").trim().toLowerCase();
     if (!/^[a-z]+$/.test(w)) return SE.say(word);
+    SE.stopAll(); // stop an example sentence that is still playing
     const order = ui.accent === "us" ? [["us_pron", "us"], ["uk_pron", "gb"]] : [["uk_pron", "gb"], ["us_pron", "us"]];
     const key = ui.accent + ":" + w;
     const known = oxFound.get(key);
