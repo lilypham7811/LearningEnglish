@@ -32,7 +32,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&display=swap" />
-  <link rel="stylesheet" href="styles.css?v=41" />
+  <link rel="stylesheet" href="styles.css?v=42" />
 </head>
 <body>
 <div class="shell">
@@ -87,10 +87,9 @@
       <div class="topics">
         <div class="topics-head">
           <div class="seg" id="topicFilter" role="group" aria-label="Lọc chủ đề">
-            <button data-f="all" aria-pressed="true">Tất cả</button>
-            <button data-f="Beginner" aria-pressed="false">Cơ bản</button>
-            <button data-f="Intermediate" aria-pressed="false">Trung cấp</button>
-            <button data-f="Advanced" aria-pressed="false">Nâng cao</button>
+            <button data-f="Beginner" aria-pressed="false">Cơ bản <span class="cnt"></span></button>
+            <button data-f="Intermediate" aria-pressed="false">Trung cấp <span class="cnt"></span></button>
+            <button data-f="Advanced" aria-pressed="false">Nâng cao <span class="cnt"></span></button>
             <button data-f="saved" aria-pressed="false">⭐ Của tôi <span class="cnt" id="savedCount">0</span></button>
           </div>
           <div class="toolbar">
@@ -105,7 +104,7 @@
               <input class="input" type="search" id="dlgSearch" placeholder="Tìm bài: cà phê, airport, phỏng vấn…" autocomplete="off" /></div>
             <span class="muted small" id="dlgCount"></span>
           </div>
-          <div class="dlg-scroll"><table class="lib dlg-table" id="dlgTable"></table></div>
+          <div class="dlg-scroll"><div class="course" id="dlgTable"></div></div>
         </div>
       </div>
 
@@ -132,6 +131,7 @@
             <button id="stopBtn" class="btn icon-btn" aria-label="Dừng">■</button>
             <span class="spacer"></span>
             <button id="saveBtn" class="btn save">☆ Lưu</button>
+            <button id="doneBtn" class="btn save" type="button">☐ Đánh dấu đã học</button>
             <button id="regenBtn" class="btn ghost" title="Nhờ AI viết bài khác cùng chủ đề">🔄 Bài khác</button>
             <button id="editBtn" class="btn ghost" title="Sửa câu bằng tay">✏️ Sửa</button>
           </div>
@@ -453,14 +453,14 @@
   </form>
 </dialog>
 
-<script src="dialogs.js?v=41"></script>
-<script src="app.js?v=41"></script>
-<script src="live.js?v=41"></script>
-<script src="library.js?v=41"></script>
-<script src="words.js?v=41"></script>
-<script src="handoff.js?v=41"></script>
-<script src="voice.js?v=41"></script>
-<script src="sync.js?v=41"></script>
-<script src="cloudvoice.js?v=41"></script>
+<script src="dialogs.js?v=42"></script>
+<script src="app.js?v=42"></script>
+<script src="live.js?v=42"></script>
+<script src="library.js?v=42"></script>
+<script src="words.js?v=42"></script>
+<script src="handoff.js?v=42"></script>
+<script src="voice.js?v=42"></script>
+<script src="sync.js?v=42"></script>
+<script src="cloudvoice.js?v=42"></script>
 </body>
 </html>

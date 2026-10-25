@@ -645,6 +645,9 @@ Name2: English sentence | Vietnamese translation`;
     const on = state.dialog && isSaved(state.dialog.id);
     $("saveBtn").textContent = on ? "★ Đã lưu" : "☆ Lưu";
     $("saveBtn").classList.toggle("saved", on);
+    const done = state.dialog && doneIds().has("done:" + state.dialog.id);
+    $("doneBtn").textContent = done ? "✓ Đã học" : "☐ Đánh dấu đã học";
+    $("doneBtn").classList.toggle("saved", !!done);
   }
   // AI-written and pasted dialogs are kept automatically, so they show up in the topic row.
   function autoSave(d) {
@@ -658,66 +661,91 @@ Name2: English sentence | Vietnamese translation`;
     renderTopics();
   }
 
-  // ---------- Dialog list: one table of every dialog (library + mine) ----------
-  // Columns: topic | dialog (click to practise) | date created. Search, filters, sortable columns;
-  // on phones each row becomes a card.
-  const CATEGORY_COLORS = {
-    "Ăn uống": "var(--r1)", "Mua sắm": "var(--r2)", "Du lịch & đi lại": "var(--r5)", "Sức khỏe": "var(--r4)",
-    "Công việc & học tập": "var(--r6)", "Dịch vụ": "var(--turmeric)", "Giao tiếp hằng ngày": "var(--leaf)",
-    "Giải trí & sở thích": "var(--r7)", "Chủ đề khác": "var(--ink-3)",
-  };
-  const catColor = (c) => CATEGORY_COLORS[c] || "var(--ink-3)";
+  // ---------- Dialog list: a course ----------
+  // Level (Cơ bản → Trung cấp → Nâng cao, or ⭐ Của tôi) → main topic, in a fixed order → numbered lessons,
+  // easiest first, each with a "Đã học" tick (synced: list "done", ids "done:<dialog id>").
+  // Searching looks through every level.
+  const TOPICS = [
+    ["Giao tiếp hằng ngày", "👋", "var(--leaf)"], ["Ăn uống", "🍽️", "var(--r1)"], ["Mua sắm", "🛍️", "var(--r2)"],
+    ["Du lịch & đi lại", "✈️", "var(--r5)"], ["Sức khỏe & thể thao", "🩺", "var(--r4)"], ["Nhà ở & dịch vụ", "🏠", "var(--turmeric)"],
+    ["Công việc & học tập", "💼", "var(--r6)"], ["Giải trí & sở thích", "🎉", "var(--r7)"], ["Chủ đề khác", "💬", "var(--ink-3)"],
+  ];
+  const CAT_ALIAS = { "Sức khỏe": "Sức khỏe & thể thao", "Dịch vụ": "Nhà ở & dịch vụ" }; // older names, in saved dialogs
+  const catColor = (c) => (TOPICS.find((t) => t[0] === c) || TOPICS[TOPICS.length - 1])[2];
+  // Lesson order inside each topic: easiest, most everyday situation first.
+  const LESSON_ORDER = [
+    "introduce", "weather", "family", "routine", "late",
+    "coffee", "restaurant", "favorite-food", "delivery",
+    "supermarket", "shopping", "market",
+    "directions", "taxi", "train", "hotel", "airport", "travel",
+    "pharmacy", "doctor", "gym",
+    "post-office", "haircut", "phone", "apartment", "tech",
+    "school", "interview",
+    "hobbies", "weekend-plans", "cinema", "birthday",
+  ];
+  const LEVELS_ORDER = ["Beginner", "Intermediate", "Advanced"];
   const LEVEL_SHORT = { Beginner: "A2", Intermediate: "B1", Advanced: "C1" };
-  let topicFilter = "all";
-  const tableUi = { q: "", sort: "topic", dir: 1 };
+  let topicFilter = safeGet("talkLevel") || "Beginner";
+  const tableUi = { q: "" };
 
   // My dialogs (AI-written or pasted) get the topic of the closest library dialog.
   function categoryOf(d) {
-    if (d.category) return d.category;
     const lib = window.DIALOGS.find((x) => x.id === d.id);
-    if (lib) return lib.category;
-    const { best } = matchLibrary(cleanTopic(d.topic || d.title || ""));
-    return best?.category || "Chủ đề khác";
+    const c = lib?.category || d.category || matchLibrary(cleanTopic(d.topic || d.title || "")).best?.category || "Chủ đề khác";
+    return CAT_ALIAS[c] || c;
   }
   const createdAt = (d) => d.savedAt || (d.added ? new Date(d.added + "T00:00:00").getTime() : 0);
-  function topicList() {
+  const doneIds = () => new Set((safeGet("done") || []).map((x) => x.id));
+  function setDone(id, on) {
+    const key = "done:" + id, list = (safeGet("done") || []).filter((x) => x.id !== key);
+    safeSet("done", on ? [{ id: key, savedAt: Date.now() }, ...list] : list);
+    renderTopics();
+    updateSaveBtn();
+  }
+  function allDialogs() {
     const mine = getSaved().map((d) => ({ ...d, mine: true }));
     const lib = window.DIALOGS.filter((d) => !mine.some((m) => m.id === d.id));
-    let all = [...mine, ...lib].map((d) => ({ ...d, cat: categoryOf(d), at: createdAt(d) }));
-    if (topicFilter === "saved") all = all.filter((d) => d.mine);
-    else if (topicFilter !== "all") all = all.filter((d) => d.level === topicFilter);
-    const q = deaccent(tableUi.q.trim());
-    if (q) all = all.filter((d) => deaccent(`${d.cat} ${d.title} ${d.titleVi || ""}`).includes(q));
-    const key = { topic: (d) => deaccent(d.cat) + " " + deaccent(d.titleVi || d.title), title: (d) => deaccent(d.titleVi || d.title), date: (d) => d.at };
-    const k = key[tableUi.sort];
-    return all.sort((a, b) => (k(a) > k(b) ? 1 : k(a) < k(b) ? -1 : 0) * tableUi.dir);
+    const order = (d) => { const k = LESSON_ORDER.indexOf(d.id); return k < 0 ? 1e6 + createdAt(d) / 1e9 : k; };
+    return [...lib, ...mine].map((d) => ({ ...d, cat: categoryOf(d), at: createdAt(d), rank: order(d), level: LEVELS_ORDER.includes(d.level) ? d.level : "Intermediate" }))
+      .sort((a, b) => a.rank - b.rank || a.at - b.at);
   }
   function renderTopics() {
-    const list = topicList();
-    const arrow = (col) => (tableUi.sort === col ? (tableUi.dir > 0 ? " ▲" : " ▼") : "");
-    const th = (col, label, cls = "") => `<th class="${cls}"><button type="button" class="th-sort" data-sort="${col}" aria-sort="${tableUi.sort === col ? (tableUi.dir > 0 ? "ascending" : "descending") : "none"}">${label}<span class="sort-ic">${arrow(col)}</span></button></th>`;
-    $("dlgTable").innerHTML = `<thead><tr>${th("topic", "Chủ đề", "c-topic")}${th("title", "Đoạn hội thoại", "c-title")}${th("date", "Ngày tạo", "c-date")}</tr></thead><tbody>` +
-      (list.length ? list.map((d) => `<tr data-id="${esc(d.id)}" class="${state.dialog?.id === d.id ? "on" : ""}" tabindex="0">
-        <td class="c-topic" data-label="Chủ đề"><span class="cat" style="--cc:${catColor(d.cat)}"><i></i>${esc(d.cat)}</span></td>
-        <td class="c-title" data-label="Đoạn hội thoại"><div class="dt-main">
-            <span class="dt-emoji">${d.emoji || "💬"}</span>
-            <span class="dt-names"><b>${esc(d.titleVi || d.title)}</b>${d.titleVi ? `<small>${esc(d.title)}</small>` : ""}</span>
-            <span class="dt-tags"><span class="lvl lvl-${(d.level || "").toLowerCase()}" title="${LEVEL_VI[d.level] || ""}">${LEVEL_SHORT[d.level] || "–"}</span>${d.mine ? `<span class="chip ai">★ Của tôi</span>` : ""}</span>
-            <span class="dt-go">Luyện <span aria-hidden="true">→</span></span></div></td>
-        <td class="c-date" data-label="Ngày tạo">${d.at ? new Date(d.at).toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit", year: "numeric" }) : "–"}</td>
-      </tr>`).join("") : `<tr><td colspan="3" class="empty-row">${topicFilter === "saved" ? "Chưa có bài nào của bạn. Bài tạo bằng AI hoặc dán vào sẽ tự lưu ở đây; bài có sẵn thì bấm ☆ Lưu." : "Không tìm thấy bài nào."}</td></tr>`) +
-      "</tbody>";
-    $("dlgCount").textContent = `${list.length} bài`;
+    const all = allDialogs(), done = doneIds();
+    const isDone = (d) => done.has("done:" + d.id);
+    // Level buttons: lessons done / lessons at that level.
+    $("topicFilter").querySelectorAll("button[data-f]").forEach((b) => {
+      const f = b.dataset.f, at = f === "saved" ? all.filter((d) => d.mine) : all.filter((d) => d.level === f);
+      b.querySelector(".cnt").textContent = f === "saved" ? at.length : `${at.filter(isDone).length}/${at.length}`;
+      b.setAttribute("aria-pressed", !tableUi.q && f === topicFilter);
+    });
+    const q = deaccent(tableUi.q.trim());
+    const list = q ? all.filter((d) => deaccent(`${d.cat} ${d.title} ${d.titleVi || ""} ${(d.keywords || []).join(" ")} ${(d.viKeywords || []).join(" ")}`).includes(q))
+      : topicFilter === "saved" ? all.filter((d) => d.mine) : all.filter((d) => d.level === topicFilter);
+    const fresh = Date.now() - 7 * 86400000; // "Mới": added this week
+    const units = TOPICS.map(([name, emoji, color]) => {
+      const items = list.filter((d) => d.cat === name);
+      if (!items.length) return "";
+      const n = items.filter(isDone).length;
+      return `<section class="unit" style="--cc:${color}">
+        <header class="unit-head"><span class="unit-ic" aria-hidden="true">${emoji}</span><b>${esc(name)}</b>
+          <span class="unit-prog">${n}/${items.length} đã học</span><span class="unit-bar" aria-hidden="true"><i style="width:${(n / items.length) * 100}%"></i></span></header>
+        <ol class="lessons">${items.map((d, i) => `<li class="lesson${isDone(d) ? " done" : ""}${state.dialog?.id === d.id ? " on" : ""}" data-id="${esc(d.id)}" tabindex="0">
+          <span class="ls-n">${i + 1}</span><span class="dt-emoji" aria-hidden="true">${d.emoji || "💬"}</span>
+          <span class="dt-names"><b>${esc(d.titleVi || d.title)}</b>${d.titleVi ? `<small>${esc(d.title)}</small>` : ""}</span>
+          <span class="dt-tags">${q || topicFilter === "saved" ? `<span class="lvl lvl-${d.level.toLowerCase()}" title="${LEVEL_VI[d.level] || ""}">${LEVEL_SHORT[d.level]}</span>` : ""}${d.mine ? `<span class="chip ai">★ Của tôi</span>` : ""}${d.at > fresh ? `<span class="chip new">Mới</span>` : ""}</span>
+          <label class="ls-done" title="Đánh dấu bài này đã học"><input type="checkbox" data-done ${isDone(d) ? "checked" : ""} /><span>Đã học</span></label></li>`).join("")}</ol>
+      </section>`;
+    }).join("");
+    $("dlgTable").innerHTML = units || `<p class="empty-row">${topicFilter === "saved" && !q ? "Chưa có bài nào của bạn. Bài tạo bằng AI hoặc dán vào sẽ tự lưu ở đây; bài có sẵn thì bấm ☆ Lưu." : "Không tìm thấy bài nào."}</p>`;
+    $("dlgCount").textContent = `${list.length} bài · đã học ${list.filter(isDone).length}`;
   }
   function onTopicClick(e) {
-    const s = e.target.closest("button[data-sort]");
-    if (s) {
-      tableUi.dir = tableUi.sort === s.dataset.sort ? -tableUi.dir : s.dataset.sort === "date" ? -1 : 1; // newest first on first click
-      tableUi.sort = s.dataset.sort;
-      return renderTopics();
-    }
-    const row = e.target.closest("tr[data-id]");
+    const row = e.target.closest("li[data-id]");
     if (!row) return;
+    if (e.target.closest(".ls-done")) {
+      if (e.target.matches("input[data-done]")) setDone(row.dataset.id, e.target.checked);
+      return; // the tick never opens the lesson
+    }
     const mine = getSaved().find((x) => x.id === row.dataset.id);
     const src = mine || window.DIALOGS.find((x) => x.id === row.dataset.id);
     if (!src) return;
@@ -1296,7 +1324,7 @@ Name2: English sentence | Vietnamese translation`;
   function safeGet(k) { try { return JSON.parse(localStorage.getItem("se_" + k)); } catch { return null; } }
   // Synced lists: every changed item gets updatedAt, every removed item a tombstone, so computer and phone
   // can merge their copies (newest version of each item wins, deletions spread). sync.js does the merging.
-  const SYNC_LISTS = ["saved", "videos", "articles", "speeches", "words", "log"];
+  const SYNC_LISTS = ["saved", "videos", "articles", "speeches", "words", "log", "done"];
   const SYNC_PREFS = ["level", "aiModel", "alwaysAi", "showVi", "voices", "geminiVoice", "geminiKey"];
   function safeSet(k, v) {
     try {
@@ -1595,11 +1623,14 @@ Name2: English sentence | Vietnamese translation`;
       const b = e.target.closest("button[data-f]");
       if (!b) return;
       topicFilter = b.dataset.f;
-      $("topicFilter").querySelectorAll("button").forEach((x) => x.setAttribute("aria-pressed", x === b));
+      rawSet("talkLevel", topicFilter);
+      tableUi.q = "";
+      $("dlgSearch").value = "";
       renderTopics();
     };
     $("dlgSearch").oninput = (e) => { tableUi.q = e.target.value; renderTopics(); };
-    $("dlgTable").addEventListener("keydown", (e) => { if (e.key === "Enter" && e.target.matches("tr[data-id]")) onTopicClick(e); });
+    $("dlgTable").addEventListener("keydown", (e) => { if (e.key === "Enter" && e.target.matches("li[data-id]")) onTopicClick(e); });
+    $("doneBtn").onclick = () => { if (state.dialog) setDone(state.dialog.id, !doneIds().has("done:" + state.dialog.id)); };
     $("navTalk").textContent = `${window.DIALOGS.length} chủ đề có sẵn`;
     document.querySelector(".nav").onclick = (e) => {
       const b = e.target.closest("button[data-view]");

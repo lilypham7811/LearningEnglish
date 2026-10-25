@@ -85,7 +85,7 @@ window.DIALOGS = [
     ],
   },
   {
-    id: "doctor", category: "Sức khỏe", added: "2026-10-06", emoji: "🩺", title: "Visiting the Doctor", titleVi: "Đi khám bác sĩ", level: "Intermediate",
+    id: "doctor", category: "Sức khỏe & thể thao", added: "2026-10-06", emoji: "🩺", title: "Visiting the Doctor", titleVi: "Đi khám bác sĩ", level: "Intermediate",
     keywords: ["doctor", "sick", "health", "hospital", "clinic", "ill", "pain", "medicine", "appointment", "fever", "cold"],
     viKeywords: ["bac si", "kham benh", "di kham", "benh vien", "phong kham", "bi om", "bi benh", "dau hong", "bi sot", "uong thuoc"],
     speakers: ["Doctor", "Patient"],
@@ -186,7 +186,7 @@ window.DIALOGS = [
     ],
   },
   {
-    id: "phone", category: "Dịch vụ", added: "2026-10-06", emoji: "📞", title: "Making a Phone Appointment", titleVi: "Gọi điện đặt lịch hẹn", level: "Intermediate",
+    id: "phone", category: "Nhà ở & dịch vụ", added: "2026-10-06", emoji: "📞", title: "Making a Phone Appointment", titleVi: "Gọi điện đặt lịch hẹn", level: "Intermediate",
     keywords: ["phone", "call", "appointment", "schedule", "booking", "dentist", "haircut", "telephone", "reschedule"],
     viKeywords: ["goi dien", "dien thoai", "dat lich", "lich hen", "nha khoa", "nha si", "kham rang"],
     speakers: ["Receptionist", "Caller"],
@@ -224,7 +224,7 @@ window.DIALOGS = [
     ],
   },
   {
-    id: "apartment", category: "Dịch vụ", added: "2026-10-06", emoji: "🏠", title: "Renting an Apartment", titleVi: "Thuê căn hộ", level: "Intermediate",
+    id: "apartment", category: "Nhà ở & dịch vụ", added: "2026-10-06", emoji: "🏠", title: "Renting an Apartment", titleVi: "Thuê căn hộ", level: "Intermediate",
     keywords: ["apartment", "rent", "renting", "house", "flat", "landlord", "move", "moving", "home", "lease"],
     viKeywords: ["thue nha", "thue phong", "can ho", "chu nha", "chuyen nha", "nha tro", "phong tro"],
     speakers: ["Landlord", "Tenant"],
@@ -264,7 +264,7 @@ window.DIALOGS = [
     ],
   },
   {
-    id: "gym", category: "Sức khỏe", added: "2026-10-06", emoji: "🏋️", title: "Joining a Gym", titleVi: "Đăng ký phòng gym", level: "Intermediate",
+    id: "gym", category: "Sức khỏe & thể thao", added: "2026-10-06", emoji: "🏋️", title: "Joining a Gym", titleVi: "Đăng ký phòng gym", level: "Intermediate",
     keywords: ["gym", "exercise", "fitness", "workout", "sport", "training", "healthy", "running", "membership"],
     viKeywords: ["phong gym", "tap gym", "the duc", "tap the duc", "tap luyen", "the thao"],
     speakers: ["Trainer", "Member"],
@@ -302,7 +302,7 @@ window.DIALOGS = [
     ],
   },
   {
-    id: "tech", category: "Dịch vụ", added: "2026-10-06", emoji: "💻", title: "Calling Tech Support", titleVi: "Gọi hỗ trợ kỹ thuật", level: "Advanced",
+    id: "tech", category: "Nhà ở & dịch vụ", added: "2026-10-06", emoji: "💻", title: "Calling Tech Support", titleVi: "Gọi hỗ trợ kỹ thuật", level: "Advanced",
     keywords: ["computer", "tech", "technology", "support", "internet", "wifi", "laptop", "broken", "software", "router"],
     viKeywords: ["may tinh", "mat mang", "rot mang", "mang internet", "ho tro ky thuat", "sua may", "loi mang"],
     speakers: ["Support", "Customer"],
@@ -421,7 +421,7 @@ window.DIALOGS = [
     ],
   },
   {
-    id: "pharmacy", category: "Sức khỏe", added: "2026-10-12", emoji: "💊", title: "At the Pharmacy", titleVi: "Ở hiệu thuốc", level: "Beginner",
+    id: "pharmacy", category: "Sức khỏe & thể thao", added: "2026-10-12", emoji: "💊", title: "At the Pharmacy", titleVi: "Ở hiệu thuốc", level: "Beginner",
     keywords: ["pharmacy", "pharmacist", "drugstore", "medicine", "headache", "pills", "tablets", "cough", "chemist"],
     viKeywords: ["hieu thuoc", "nha thuoc", "mua thuoc", "dau dau", "bi ho", "thuoc cam"],
     speakers: ["Pharmacist", "Customer"],
@@ -581,7 +581,7 @@ window.DIALOGS = [
     ],
   },
   {
-    id: "haircut", category: "Dịch vụ", added: "2026-10-12", emoji: "💇", title: "At the Hair Salon", titleVi: "Ở tiệm cắt tóc", level: "Beginner",
+    id: "haircut", category: "Nhà ở & dịch vụ", added: "2026-10-12", emoji: "💇", title: "At the Hair Salon", titleVi: "Ở tiệm cắt tóc", level: "Beginner",
     keywords: ["hair", "haircut", "salon", "barber", "hairdresser", "trim", "style", "shampoo"],
     viKeywords: ["cat toc", "tiem toc", "tiem cat toc", "lam toc", "goi dau", "uon toc", "nhuom toc"],
     speakers: ["Stylist", "Customer"],
@@ -601,7 +601,7 @@ window.DIALOGS = [
     ],
   },
   {
-    id: "post-office", category: "Dịch vụ", added: "2026-10-12", emoji: "📦", title: "At the Post Office", titleVi: "Ở bưu điện", level: "Beginner",
+    id: "post-office", category: "Nhà ở & dịch vụ", added: "2026-10-12", emoji: "📦", title: "At the Post Office", titleVi: "Ở bưu điện", level: "Beginner",
     keywords: ["post", "office", "package", "parcel", "mail", "send", "letter", "stamp", "shipping", "deliver"],
     viKeywords: ["buu dien", "gui hang", "gui do", "gui buu kien", "gui thu", "chuyen phat"],
     speakers: ["Clerk", "Customer"],
