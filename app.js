@@ -665,8 +665,8 @@ Name2: English sentence | Vietnamese translation`;
   // Level (Cơ bản → Trung cấp → Nâng cao, or ⭐ Của tôi) → main topic, in a fixed order → numbered lessons,
   // easiest first, each with a "Đã học" tick (synced: list "done", ids "done:<dialog id>").
   // Searching looks through every level.
-  // Colours follow the rainbow in topic order, starting from green (green → teal → blue → indigo → violet →
-  // red → orange → yellow); the list shows them as tints on the topic headings.
+  // Rainbow colours, starting from green (green → teal → blue → indigo → violet → red → orange → yellow). In the
+  // list they go by position (first topic shown is green, at every level); the topic's own colour is used elsewhere.
   const TOPICS = [
     ["Giao tiếp hằng ngày", "👋", "var(--r4)"], ["Ăn uống", "🍽️", "#12B5A8"],
     ["Mua sắm", "🛍️", "var(--r5)"], ["Du lịch & đi lại", "✈️", "var(--r6)"], ["Sức khỏe & thể thao", "🩺", "var(--r7)"],
@@ -725,9 +725,11 @@ Name2: English sentence | Vietnamese translation`;
     const list = q ? all.filter((d) => deaccent(`${d.cat} ${d.title} ${d.titleVi || ""} ${(d.keywords || []).join(" ")} ${(d.viKeywords || []).join(" ")}`).includes(q))
       : topicFilter === "saved" ? all.filter((d) => d.mine) : all.filter((d) => d.level === topicFilter);
     const fresh = Date.now() - 7 * 86400000; // "Mới": added this week
-    const units = TOPICS.map(([name, emoji, color]) => {
+    // Colours go by position, so every level's list runs green → teal → blue → … whatever topics it has.
+    const shown = TOPICS.filter(([name]) => list.some((d) => d.cat === name));
+    const units = shown.map(([name, emoji], k) => {
       const items = list.filter((d) => d.cat === name);
-      if (!items.length) return "";
+      const color = name === "Chủ đề khác" ? TOPICS[TOPICS.length - 1][2] : TOPICS[k % (TOPICS.length - 1)][2];
       const n = items.filter(isDone).length;
       return `<section class="unit" style="--cc:${color}">
         <header class="unit-head"><span class="unit-ic" aria-hidden="true">${emoji}</span><b>${esc(name)}</b>
