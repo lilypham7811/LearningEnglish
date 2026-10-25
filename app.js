@@ -11,7 +11,7 @@
     voices: [],
     voiceA: null,
     voiceB: null,
-    rate: 0.9,
+    rate: 1,
     playToken: 0,        // bump to cancel a running playback sequence
     selected: -1,        // index of line being shadowed
     recording: null,     // shadow-panel recording session
@@ -1646,7 +1646,12 @@ Name2: English sentence | Vietnamese translation`;
     $("importBtn").onclick = $("importBtn2").onclick = () => $("importFile").click();
     $("importFile").onchange = (e) => { if (e.target.files[0]) importSaved(e.target.files[0]); e.target.value = ""; };
     renderSaved();
-    $("rate").oninput = (e) => { state.rate = +e.target.value; $("rateVal").textContent = state.rate.toFixed(2).replace(/0$/, "") + "×"; };
+    // Speed: normal (1×) unless the learner chose another one, which is remembered. (0.9× used to be the
+    // default; with the natural voices it sounded slow and sleepy.)
+    const showRate = () => { $("rate").value = state.rate; $("rateVal").textContent = state.rate.toFixed(2).replace(/\.?0+$/, "") + "×"; };
+    state.rate = +(safeGet("rate") || 1);
+    showRate();
+    $("rate").oninput = (e) => { state.rate = +e.target.value; rawSet("rate", state.rate); showRate(); };
     $("hideText").onchange = (e) => document.body.classList.toggle("hide-text", e.target.checked);
 
     // Shadow panel
