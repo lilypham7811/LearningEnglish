@@ -839,6 +839,12 @@
     const n = upcoming.filter((w) => startOfDay(w.due) === day).length;
     return `Tiếp theo: ${day === tomorrow ? "ngày mai" : dayLabel(day)} · ${n} từ ôn lại${more}`;
   }
+  // What "Nhớ rồi" does to this word, in words: "ôn lại sau 3 ngày", "… 1 tuần", "đã thuộc".
+  const GAP_NAMES = { 1: "1 ngày", 3: "3 ngày", 7: "1 tuần", 14: "2 tuần", 30: "1 tháng" };
+  function nextGap(w, failedToday) {
+    const stage = failedToday ? 1 : Math.min(w.stage + 1, MASTERED);
+    return stage >= MASTERED ? "xong, đã thuộc" : `ôn lại sau ${GAP_NAMES[OFFSETS[stage - 1]]}`;
+  }
   function renderReview() {
     const box = $("reviewBox");
     if (!box) return;
@@ -894,15 +900,16 @@
     const esc_re = (x) => x.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     const blank = (txt) => [w.word, w.form].filter(Boolean).reduce((acc, f) => acc.replace(new RegExp(esc_re(f), "ig"), "_____"), esc(txt));
     box.innerHTML = `<div class="panel-body flash">
-      <div class="flash-nav"><button type="button" class="btn small ghost" data-back ${R.history?.length ? "" : "disabled"}>◀ Trước</button>
+      <div class="flash-nav"><button type="button" class="btn nav-btn" data-back ${R.history?.length ? "" : "disabled"} title="Quay lại từ trước (huỷ câu trả lời của từ đó)">◀ Back</button>
         <span class="muted small">Còn ${R.queue.length} từ · ${STAGE_NAMES[Math.min(w.stage, STAGE_NAMES.length - 1)]}</span>
-        <button type="button" class="btn small ghost" data-next title="Bỏ qua từ này lần này (vẫn ôn vào lần sau)">Tiếp ▶</button></div>
+        <button type="button" class="btn nav-btn" data-next title="Bỏ qua từ này lần này, không chấm (vẫn ôn vào lần sau)">Next ▶</button></div>
       <div class="flash-word">${esc(w.word)} <button type="button" class="btn small" data-say>🔊</button></div>
       ${R.shown ? `<div class="muted">${esc([w.pos, w.ipa].filter(Boolean).join(" · "))}</div>
           ${w.meaningVi ? `<div class="wc-mean">${esc(w.meaningVi)}</div>` : ""}${w.defEn ? `<div class="wc-def">${esc(w.defEn)}</div>` : ""}
           ${exs.length ? `<ol class="wc-exs">${exs.map((s, i) => `<li><button type="button" class="ex-say" data-fex="${i}" aria-label="Nghe câu">🔊</button> ${mark(w, s)}</li>`).join("")}</ol>` : ""}
           ${siblings(w).length ? `<div class="flash-fam">🧩 Cùng họ: ${siblings(w).map((x) => `<b>${esc(x.word)}</b>${x.pos ? ` <i>${esc(x.pos)}</i>` : ""}${x.meaningVi ? ` – ${esc(x.meaningVi.split(/[;,]/)[0])}` : ""}`).join(" · ")}</div>` : ""}
-          <div class="toolbar flash-acts"><button class="btn" data-again>😕 Chưa nhớ</button><button class="btn primary" data-good>🙂 Nhớ rồi</button></div>
+          <div class="toolbar flash-acts"><button class="btn answer" data-again>😕 Chưa nhớ<small>ôn lại ngày mai</small></button>
+            <button class="btn primary answer" data-good>🙂 Nhớ rồi<small>${nextGap(w, R.again.has(w.id))}</small></button></div>
           <button type="button" class="linkish flash-known" data-known>✓ Thuộc rồi, không cần ôn nữa</button>`
         : `${exs[0] ? `<div class="wc-ctx">“${blank(exs[0])}”</div>` : ""}
           <div class="hint small">Nhớ nghĩa của từ này không? Thử nói một câu với từ này, rồi bấm Hiện nghĩa.</div>

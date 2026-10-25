@@ -729,3 +729,9 @@ h2 { font-weight: 800; letter-spacing: -0.02em; }
 .flash-nav .btn[disabled] { opacity: .35; }
 .flash-known { display: block; margin: .6rem auto 0; font-size: .85rem; color: var(--ink-3); }
 .flash .wc-exs .ex-say { margin-right: .2rem; }
+
+/* Flashcards: big, clear Back / Next; answers say what they do */
+.flash-nav .nav-btn { min-height: 2.6rem; padding: .45rem 1.1rem; font-size: 1.05rem; font-weight: 700; border: 1.5px solid var(--line); background: var(--surface); }
+.flash-nav .nav-btn:not([disabled]):hover { border-color: var(--leaf); color: var(--leaf); }
+.flash-acts .answer { display: inline-flex; flex-direction: column; align-items: center; line-height: 1.2; padding-block: .5rem; min-width: 9rem; }
+.flash-acts .answer small { font-size: .75rem; font-weight: 500; opacity: .8; margin-top: .15rem; }
