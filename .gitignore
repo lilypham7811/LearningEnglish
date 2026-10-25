@@ -1,3 +1,6 @@
 github-upload/
 __pycache__/
 *.exe
+
+# Voice samples made for choosing a voice (not part of the app)
+voice-samples/

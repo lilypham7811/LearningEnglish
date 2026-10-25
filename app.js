@@ -64,8 +64,15 @@
   // Speak one text; resolves when finished. onWord(charIndex) for highlighting.
   // Natural AI voice (voice.js) when it is turned on and ready; on iPhone/iPad Google's voice as audio
   // (the device voice is often silent there); otherwise the device's voice.
-  function speak(text, voice, rate, onWord) {
-    const which = voice && voice === state.voiceB && state.voiceB !== state.voiceA ? "B" : "A";
+  // who: "A" or "B", the speaker (dialog lines); otherwise worked out from the device voice.
+  // First choice everywhere: the AI voice made by GitHub (cloudvoice.js), when this sentence is ready.
+  function speak(text, voice, rate, onWord, who) {
+    const which = who || (voice && voice === state.voiceB && state.voiceB !== state.voiceA ? "B" : "A");
+    const cloud = window.SE_CLOUDVOICE;
+    if (cloud?.has(text, which)) return cloud.play(text, which, rate, onWord).then((ok) => (ok ? undefined : speakAny(text, voice, rate, onWord, which)));
+    return speakAny(text, voice, rate, onWord, which);
+  }
+  function speakAny(text, voice, rate, onWord, which) {
     const fallback = () => (isIOS ? speakCloud(text, which, rate, onWord).then((ok) => (ok ? undefined : speakDevice(text, voice, rate, onWord)))
       : speakDevice(text, voice, rate, onWord));
     if (window.SE_VOICE?.enabled()) return window.SE_VOICE.speak(text, which, rate).then((ok) => (ok ? undefined : fallback()));
@@ -208,6 +215,7 @@
     state.playToken++;
     cloudGen++;
     cloudAudio?.pause();
+    window.SE_CLOUDVOICE?.stop();
     cloudDone?.(true);
     cancelSpeech();
     window.SE_VOICE?.stop();
@@ -215,6 +223,7 @@
     clearWordHighlight();
   }
   const voiceFor = (i) => (state.dialog.lines[i][0] === 0 ? state.voiceA : state.voiceB);
+  const whoFor = (i) => (state.dialog.lines[i][0] === 0 ? "A" : "B");
 
   async function playLine(i, rate = state.rate, token = ++state.playToken) {
     cancelSpeech();
@@ -225,7 +234,7 @@
     const words = li ? [...li.querySelectorAll(".w")] : [];
     const next = state.dialog.lines[i + 1]; // get the next line ready while this one plays
     if (next) window.SE_VOICE?.prefetch(next[1], next[0] === 0 ? "A" : "B");
-    await speak(state.dialog.lines[i][1], voiceFor(i), rate, (ci) => highlightWord(words, ci));
+    await speak(state.dialog.lines[i][1], voiceFor(i), rate, (ci) => highlightWord(words, ci), whoFor(i));
     if (token === state.playToken) { li?.classList.remove("active"); clearWordHighlight(); }
     return token === state.playToken; // false = cancelled
   }
@@ -233,7 +242,7 @@
   // Speak any text in the voice of line i's speaker (chunks, role-play). Resolves false if cancelled.
   async function say(text, i, rate = state.rate, token = ++state.playToken) {
     cancelSpeech();
-    await speak(text, voiceFor(i), rate);
+    await speak(text, voiceFor(i), rate, undefined, whoFor(i));
     return token === state.playToken;
   }
 

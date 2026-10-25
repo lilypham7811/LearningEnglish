@@ -158,6 +158,7 @@
       }
       SE.rawSet("syncLast", Date.now());
       setStatus("ok");
+      document.dispatchEvent(new Event("se:syncdone")); // cloudvoice.js: list new sentences for the AI voice
     } catch (err) {
       setStatus("error", err.message || "Không kết nối được. Kiểm tra Internet.");
     } finally {
@@ -260,7 +261,7 @@
   }
 
   // ---------- Wire up ----------
-  window.SE_SYNC = { collect, merge, dirty, syncNow };
+  window.SE_SYNC = { collect, merge, dirty, syncNow, gh, owner };
   $("syncToken").value = token();
   // A pasted token is checked right away: shape first, then GitHub (who it belongs to, access to the repo).
   function useToken(v) {

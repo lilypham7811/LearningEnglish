@@ -11,9 +11,12 @@
   const MODEL = "onnx-community/Kokoro-82M-v1.0-ONNX";
   const LIB = "https://cdn.jsdelivr.net/npm/kokoro-js@1/+esm";
   const CACHE = "se-voice-v1";
+  // Sample of each voice: voices/<id>.mp3 (same sentence for all, to compare).
   const VOICES = [
-    ["af_heart", "Heart (nữ, Mỹ, tự nhiên nhất)"], ["af_bella", "Bella (nữ, Mỹ)"], ["bf_emma", "Emma (nữ, Anh)"],
-    ["am_michael", "Michael (nam, Mỹ)"], ["am_fenrir", "Fenrir (nam, Mỹ)"], ["am_puck", "Puck (nam, Mỹ)"], ["bm_george", "George (nam, Anh)"],
+    ["af_heart", "Heart · nữ, Mỹ (tự nhiên nhất)"], ["af_bella", "Bella · nữ, Mỹ"], ["af_nicole", "Nicole · nữ, Mỹ, thì thầm"],
+    ["af_sarah", "Sarah · nữ, Mỹ"], ["af_aoede", "Aoede · nữ, Mỹ"], ["bf_emma", "Emma · nữ, Anh"], ["bf_isabella", "Isabella · nữ, Anh"],
+    ["am_michael", "Michael · nam, Mỹ"], ["am_fenrir", "Fenrir · nam, Mỹ"], ["am_puck", "Puck · nam, Mỹ"], ["am_echo", "Echo · nam, Mỹ"],
+    ["bm_george", "George · nam, Anh"], ["bm_fable", "Fable · nam, Anh"], ["bm_lewis", "Lewis · nam, Anh"],
   ];
 
   const isIOS = /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
@@ -95,39 +98,42 @@
   function prefetch(text, which = "A") { if (enabled() && V.tts && text) audioFor(text.trim(), voiceFor(which)).catch(() => {}); }
 
   // ---------- Settings ----------
+  // Settings: the two AI voices (used by the phone audio GitHub makes, and by this computer's own AI voice),
+  // a sample of each, how many sentences are ready, and on a computer with a graphics card the local AI voice.
+  let sample = null;
   function settingsUi() {
     const box = $("aiVoiceBox");
     if (!box) return;
-    if (isIOS) {
-      box.innerHTML = `<p class="hint small">✨ <b>Giọng AI tự nhiên</b> chỉ dùng trên máy tính. Trên iPhone, app đọc bằng <b>giọng Google</b> (giọng Mỹ, người nói thứ hai giọng Anh) và từ vựng bằng <b>bản ghi âm Oxford</b>.</p>`;
-      return;
-    }
-    if (!supported) {
-      box.innerHTML = `<p class="hint small">✨ <b>Giọng AI tự nhiên</b> cần máy tính có card đồ hoạ (Chrome hoặc Edge). Trên <b>iPhone</b>, tải giọng Siri chất lượng cao miễn phí: <b>Cài đặt → Trợ năng → Nội dung được đọc → Giọng nói → Tiếng Anh</b> → chọn một giọng có chữ <b>“Nâng cao”</b> hoặc <b>“Cao cấp”</b> (ví dụ Ava, Zoe, Evan) → tải về. Sau đó mở lại app và chọn giọng đó ở ô Người nói A/B bên dưới.</p>`;
-      return;
-    }
     const opts = (sel) => VOICES.map(([id, name]) => `<option value="${id}" ${id === sel ? "selected" : ""}>${name}</option>`).join("");
-    box.innerHTML = `<label class="toggle"><input type="checkbox" id="aiVoiceOn" ${enabled() ? "checked" : ""} /> ✨ <b>Giọng AI tự nhiên</b> (miễn phí, chạy trên máy này, tải khoảng 330 MB một lần)</label>
-      <div class="ai-voice-opts" ${enabled() ? "" : "hidden"}>
-        <label>Giọng người nói A <select class="select" id="aiVoiceA">${opts(voiceFor("A"))}</select></label>
-        <label>Giọng người nói B <select class="select" id="aiVoiceB">${opts(voiceFor("B"))}</select></label>
-        <button type="button" class="btn small" id="aiVoiceTest">🔊 Nghe thử</button>
-      </div>
-      <p class="hint small" id="aiVoiceStatus">${V.tts ? "✓ Giọng AI đã sẵn sàng." : ""}</p>`;
-    $("aiVoiceOn").onchange = (e) => {
+    const row = (who) => `<label>Giọng AI · người nói ${who}<span class="pick-row"><select class="select" id="aiVoice${who}">${opts(voiceFor(who))}</select>
+      <button type="button" class="btn small" data-sample="${who}" aria-label="Nghe thử giọng ${who}">🔊</button></span></label>`;
+    box.innerHTML = `${row("A")}${row("B")}
+      <p class="hint small">A đọc từ, câu ví dụ, bài phát biểu và người thứ nhất trong hội thoại; B là người thứ hai. Đổi giọng thì GitHub làm lại các câu bằng giọng mới (vài phút).</p>
+      <p class="hint small" id="cloudVoiceStatus">${esc(window.SE_CLOUDVOICE?.statusText() || "")}</p>
+      ${supported ? `<label class="toggle"><input type="checkbox" id="aiVoiceOn" ${enabled() ? "checked" : ""} /> ✨ Câu GitHub chưa làm xong: đọc bằng giọng AI ngay trên máy tính này (tải khoảng 330 MB một lần)</label>
+        <p class="hint small" id="aiVoiceStatus">${V.tts ? "✓ Giọng AI trên máy này đã sẵn sàng." : ""}</p>` : ""}`;
+    $("aiVoiceOn")?.addEventListener("change", (e) => {
       SE.safeSet("aiVoice", e.target.checked);
-      box.querySelector(".ai-voice-opts").hidden = !e.target.checked;
       if (e.target.checked) load().catch(() => {});
-    };
-    $("aiVoiceA").onchange = (e) => SE.safeSet("aiVoiceA", e.target.value);
-    $("aiVoiceB").onchange = (e) => SE.safeSet("aiVoiceB", e.target.value);
-    $("aiVoiceTest").onclick = async () => {
-      await load().catch(() => {});
-      await speak("Hi there! I'm your English practice partner. Shall we start?", "A", 1);
-      await speak("Sure. Let's practise ordering coffee together.", "B", 1);
-    };
+    });
+    for (const who of ["A", "B"]) {
+      $("aiVoice" + who).onchange = (e) => {
+        SE.safeSet("aiVoice" + who, e.target.value);
+        SE.rawSet("aiVoiceAt", Date.now());
+        playSample(e.target.value);
+        window.SE_CLOUDVOICE?.publish({ force: true });
+      };
+    }
+    box.querySelectorAll("[data-sample]").forEach((b) => { b.onclick = () => playSample($("aiVoice" + b.dataset.sample).value); });
   }
-  $("settings")?.addEventListener("close", stop);
+  function playSample(id) {
+    sample?.pause();
+    sample = new Audio(`voices/${id}.mp3`);
+    sample.play().catch(() => {});
+  }
+  const esc = (t) => SE.esc(t);
+  document.addEventListener("se:cloudvoice", () => { const el = $("cloudVoiceStatus"); if (el) el.textContent = window.SE_CLOUDVOICE?.statusText() || ""; });
+  $("settings")?.addEventListener("close", () => { stop(); sample?.pause(); });
   settingsUi();
   document.getElementById("settingsBtn")?.addEventListener("click", settingsUi);
   // Warm up quietly if the learner already turned it on (model comes from the browser cache after the first time).
