@@ -13,6 +13,9 @@ import html, ipaddress, json, os, re, subprocess, time, urllib.parse, urllib.req
 import trafilatura
 
 
+VERSION = 2  # raise when the reader gets better: pages it couldn't read before are tried again
+
+
 def public_link(url):
     """http(s) links to websites only: never this machine or a private network."""
     try:
@@ -39,7 +42,7 @@ def msn(url):
     body = re.sub(r"</p>|<br\s*/?>|</h[1-6]>", "\n\n", d.get("body") or "")
     text = re.sub(r"\n{3,}", "\n\n", html.unescape(re.sub(r"<[^>]+>", "", body))).strip()
     return {"title": d.get("title") or "", "site": (d.get("provider") or {}).get("name") or "MSN",
-            "text": text[:40000], "at": int(time.time() * 1000)}
+            "text": text[:40000], "at": int(time.time() * 1000), "v": VERSION}
 
 
 def article(url):
@@ -53,7 +56,7 @@ def article(url):
     if len(text) < 400:  # a description or a cookie notice, not an article
         text = ""
     return {"title": (doc.title if doc else "") or "", "site": (doc.sitename if doc else "") or "",
-            "text": text[:40000], "at": int(time.time() * 1000)}
+            "text": text[:40000], "at": int(time.time() * 1000), "v": VERSION}
 
 
 def main():
@@ -61,7 +64,8 @@ def main():
         return
     wanted = json.load(open("voice.json", encoding="utf-8")).get("articles", [])
     data = json.load(open("articles.json", encoding="utf-8")) if os.path.exists("articles.json") else {}
-    todo = [u for u in dict.fromkeys(str(x).strip() for x in wanted) if public_link(u) and u not in data][:50]
+    todo = [u for u in dict.fromkeys(str(x).strip() for x in wanted)
+            if public_link(u) and (u not in data or (not data[u].get("text") and data[u].get("v", 1) < VERSION))][:50]
     print(f"{len(todo)} articles to fetch")
     if not todo:
         return
@@ -70,7 +74,7 @@ def main():
             data[u] = article(u)
         except Exception as err:
             print("could not read one page:", type(err).__name__)
-            data[u] = {"title": "", "site": "", "text": "", "at": int(time.time() * 1000)}
+            data[u] = {"title": "", "site": "", "text": "", "at": int(time.time() * 1000), "v": VERSION}
         time.sleep(1)
     with open("articles.json", "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=0, sort_keys=True)

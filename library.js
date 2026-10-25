@@ -1261,13 +1261,12 @@
   // Article text found by GitHub for articles saved by link only (tools/voice/make_articles.py → articles.json).
   function applyArticleTexts(map) {
     for (const a of list("article")) {
-      const e = !a.text && !a.textTried && map[a.url];
-      if (!e) continue;
+      const e = !a.text && map[a.url];
+      if (!e || (!e.text && a.textTried)) continue; // text that arrives later is still taken
       const bare = (h) => (h || "").replace(/^www\./, "");
       const placeholder = !a.title || bare(a.title) === bare(hostOf(a.url)) || a.title === "Bài báo";
-      updateItem("article", a.id, e.text
-        ? { text: e.text, excerpt: e.text.slice(0, 260), textTried: true, ...(placeholder && e.title ? { title: e.title } : {}), ...(e.site && !a.site ? { site: e.site } : {}) }
-        : { textTried: true });
+      updateItem("article", a.id, { textTried: true, ...(e.text ? { text: e.text, excerpt: e.text.slice(0, 260) } : {}),
+        ...(placeholder && e.title ? { title: e.title } : {}), ...(e.site && (!a.site || a.site === hostOf(a.url)) ? { site: e.site } : {}) });
     }
     if (!$("view-article").hidden) render("article");
   }
