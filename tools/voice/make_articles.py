@@ -8,7 +8,7 @@ tried again; the app then keeps its "paste the text" box.
 
 Run from the sync repo's folder:  python make_articles.py
 """
-import ipaddress, json, os, subprocess, time, urllib.parse
+import html, ipaddress, json, os, re, subprocess, time, urllib.parse, urllib.request
 
 import trafilatura
 
@@ -28,7 +28,25 @@ def public_link(url):
         return False
 
 
+def msn(url):
+    """MSN pages build the article with scripts after loading; its content service has the text."""
+    m = re.search(r"msn\.com/([a-z]{2}-[a-z]{2})/.*/ar-([A-Za-z0-9]+)", url)
+    if not m:
+        return None
+    req = urllib.request.Request(f"https://assets.msn.com/content/view/v2/Detail/{m.group(1)}/{m.group(2)}", headers={"User-Agent": "Mozilla/5.0"})
+    with urllib.request.urlopen(req, timeout=25) as r:
+        d = json.loads(r.read().decode("utf-8"))
+    body = re.sub(r"</p>|<br\s*/?>|</h[1-6]>", "\n\n", d.get("body") or "")
+    text = re.sub(r"\n{3,}", "\n\n", html.unescape(re.sub(r"<[^>]+>", "", body))).strip()
+    return {"title": d.get("title") or "", "site": (d.get("provider") or {}).get("name") or "MSN",
+            "text": text[:40000], "at": int(time.time() * 1000)}
+
+
 def article(url):
+    if "msn.com/" in url:
+        found = msn(url)
+        if found and len(found["text"]) >= 400:
+            return found
     html = trafilatura.fetch_url(url)
     doc = trafilatura.bare_extraction(html, with_metadata=True) if html else None
     text = ((doc.text if doc else "") or "").strip()
