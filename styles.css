@@ -705,3 +705,5 @@ h2 { font-weight: 800; letter-spacing: -0.02em; }
 #phoneDlg .steps li { margin: .3rem 0; }
 .copy-row { display: flex; align-items: center; gap: .5rem; margin-top: .35rem; padding: .4rem .6rem; border-radius: .5rem; background: var(--surface-2); }
 .copy-row code { flex: 1; min-width: 0; overflow-wrap: anywhere; font-size: .8rem; }
+
+.sound-log { white-space: pre-wrap; font-size: .78rem; margin: .5rem 0 0; padding: .5rem .6rem; border-radius: .5rem; background: var(--surface); min-height: 2.5rem; }

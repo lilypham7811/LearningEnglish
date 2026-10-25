@@ -32,7 +32,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&display=swap" />
-  <link rel="stylesheet" href="styles.css?v=36" />
+  <link rel="stylesheet" href="styles.css?v=37" />
 </head>
 <body>
 <div class="shell">
@@ -405,6 +405,14 @@
     <label>Giọng của máy – người nói A <select id="voiceA" class="select"></select></label>
     <label>Giọng của máy – người nói B <select id="voiceB" class="select"></select></label>
     <p class="hint small">Giọng của máy dùng khi tắt giọng AI, hoặc trong lúc giọng AI đang tải. Microsoft Edge có giọng “Natural” khá tự nhiên.</p>
+    <details class="ext-help" id="soundTest"><summary>🔇 Không nghe thấy tiếng? Kiểm tra âm thanh</summary>
+      <p class="hint small">Bấm lần lượt từng nút (mỗi nút một lần), nghe xem có tiếng không, rồi chụp màn hình phần này gửi cho người hỗ trợ.</p>
+      <div class="toolbar"><button type="button" class="btn small" data-t="oxford">1 · Oxford</button>
+        <button type="button" class="btn small" data-t="google">2 · Google</button>
+        <button type="button" class="btn small" data-t="device">3 · Giọng của máy</button>
+        <button type="button" class="btn small" data-t="app">4 · Như trong app</button></div>
+      <pre id="soundLog" class="sound-log"></pre>
+    </details>
 
     <h3>AI viết hội thoại khi chưa có khoá Google</h3>
     <label>Mô hình chạy trên máy
@@ -445,13 +453,13 @@
   </form>
 </dialog>
 
-<script src="dialogs.js?v=36"></script>
-<script src="app.js?v=36"></script>
-<script src="live.js?v=36"></script>
-<script src="library.js?v=36"></script>
-<script src="words.js?v=36"></script>
-<script src="handoff.js?v=36"></script>
-<script src="voice.js?v=36"></script>
-<script src="sync.js?v=36"></script>
+<script src="dialogs.js?v=37"></script>
+<script src="app.js?v=37"></script>
+<script src="live.js?v=37"></script>
+<script src="library.js?v=37"></script>
+<script src="words.js?v=37"></script>
+<script src="handoff.js?v=37"></script>
+<script src="voice.js?v=37"></script>
+<script src="sync.js?v=37"></script>
 </body>
 </html>

@@ -77,7 +77,9 @@
       a.preservesPitch = true;
       const done = () => { URL.revokeObjectURL(a.src); if (V.audio === a) V.audio = null; resolve(true); };
       a.onended = a.onerror = a.onpause = done;
-      a.play().catch(done);
+      // Blocked (iPhone: sound must start right after a tap, and making the audio took a moment): say so,
+      // so the caller uses another voice instead of staying silent.
+      a.play().catch(() => { URL.revokeObjectURL(a.src); if (V.audio === a) V.audio = null; resolve(false); });
     });
   }
   function stop() { if (V.audio) { const a = V.audio; V.audio = null; a.pause(); } }

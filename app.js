@@ -66,9 +66,9 @@
   // (the device voice is often silent there); otherwise the device's voice.
   function speak(text, voice, rate, onWord) {
     const which = voice && voice === state.voiceB && state.voiceB !== state.voiceA ? "B" : "A";
-    if (window.SE_VOICE?.enabled()) {
-      return window.SE_VOICE.speak(text, which, rate).then((ok) => (ok ? undefined : speakDevice(text, voice, rate, onWord)));
-    }
+    const fallback = () => (isIOS ? speakCloud(text, which, rate, onWord).then((ok) => (ok ? undefined : speakDevice(text, voice, rate, onWord)))
+      : speakDevice(text, voice, rate, onWord));
+    if (window.SE_VOICE?.enabled()) return window.SE_VOICE.speak(text, which, rate).then((ok) => (ok ? undefined : fallback()));
     if (isIOS) return speakCloud(text, which, rate, onWord).then((ok) => (ok ? undefined : speakDevice(text, voice, rate, onWord)));
     return speakDevice(text, voice, rate, onWord);
   }
@@ -77,7 +77,7 @@
   // Google refuses requests that carry the page's address, so the audio plays inside a hidden frame that sends
   // none. One audio element is reused: iPhone lets an element play again once a tap has started it.
   const isIOS = /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
-  let quiet = null, cloudAudio = null, cloudGen = 0, cloudDone = null; // cloudDone: ends the part now playing
+  let quiet = null, cloudAudio = null, cloudGen = 0, cloudDone = null, cloudErr = ""; // cloudDone: ends the part now playing
   function makeQuietFrame() {
     quiet = document.createElement("iframe");
     quiet.hidden = true;
@@ -115,8 +115,8 @@
         a.playbackRate = Math.min(Math.max(rate || 1, 0.5), 2);
         a.ontimeupdate = () => { if (onWord && a.duration) onWord(c.from + Math.floor((c.t.length * a.currentTime) / a.duration)); };
         a.onended = () => resolve(true);
-        a.onerror = () => resolve(false);
-        a.play().catch(() => resolve(false));
+        a.onerror = () => { cloudErr = "lỗi tải âm thanh " + (a.error?.code || ""); resolve(false); };
+        a.play().catch((e) => { cloudErr = "bị chặn: " + e.name; resolve(false); });
       });
       if (gen !== cloudGen) return true; // stopped, or another text started
       if (!ok) return false;
@@ -124,6 +124,50 @@
     return true;
   }
   if (isIOS) makeQuietFrame();
+
+  // Settings → "Không nghe thấy tiếng?": each button plays one way of making sound and writes what happened,
+  // so a screenshot shows which one the device blocks. Each test needs its own tap (phones only allow sound
+  // started by a tap).
+  function soundTest(kind) {
+    const log = $("soundLog");
+    const line = (t) => { log.textContent += t + "\n"; };
+    const watch = (label, a) => {
+      let done = false;
+      const end = (t) => { if (!done) { done = true; line(label + ": " + t); } };
+      a.onplaying = () => end("✓ đang phát");
+      a.onerror = () => end("✗ lỗi tải " + (a.error?.code || ""));
+      setTimeout(() => end("✗ không phát sau 6 giây"), 6000);
+      a.play().catch((e) => end("✗ bị chặn (" + e.name + ")"));
+    };
+    if (!log.textContent) {
+      line(`Phiên bản ${document.querySelector('script[src*="app.js"]')?.src.match(/v=(\d+)/)?.[1]} · iPhone/iPad: ${isIOS ? "có" : "không"} · app ở màn hình chính: ${navigator.standalone || matchMedia("(display-mode: standalone)").matches ? "có" : "không"}`);
+      line(`Giọng AI: ${window.SE_VOICE?.enabled() ? "BẬT" : "tắt"} · khung Google: ${quiet?.dataset.ready ? "sẵn sàng" : "chưa có"} · giọng của máy: ${synth?.getVoices().length || 0} giọng`);
+    }
+    const sample = "This is a sound test.";
+    if (kind === "oxford") watch("1 Oxford", new Audio("https://www.oxfordlearnersdictionaries.com/media/english/uk_pron/l/lon/longe/longevity__gb_1.mp3"));
+    else if (kind === "google") {
+      const win = quiet?.dataset.ready ? quiet.contentWindow : null;
+      if (!win) { makeQuietFrame(); line("2 Google: khung chưa sẵn sàng, bấm lại sau 1 giây"); return; }
+      watch("2 Google", new win.Audio(`https://translate.googleapis.com/translate_tts?client=gtx&ie=UTF-8&tl=en-US&q=${encodeURIComponent(sample)}`));
+    } else if (kind === "device") {
+      const u = new SpeechSynthesisUtterance(sample);
+      u.lang = "en-US";
+      let started = false;
+      u.onstart = () => { started = true; line("3 Giọng của máy: ✓ đang đọc"); };
+      u.onerror = (e) => line("3 Giọng của máy: ✗ " + e.error);
+      setTimeout(() => { if (!started) line("3 Giọng của máy: ✗ không bắt đầu đọc"); }, 4000);
+      synth.cancel();
+      synth.speak(u);
+    } else {
+      cloudErr = "";
+      const t0 = Date.now();
+      window.SE.say(sample).then(() => line(`4 Như trong app: xong sau ${((Date.now() - t0) / 1000).toFixed(1)} giây${cloudErr ? " · Google " + cloudErr : ""}`));
+    }
+  }
+  document.getElementById("soundTest")?.addEventListener("click", (e) => {
+    const b = e.target.closest("button[data-t]");
+    if (b) soundTest(b.dataset.t);
+  });
   // iPhone/iPad Safari: (1) the device voice is muted by the side silent switch unless the page asks for
   // "playback" sound (Safari 17+; set back to "auto" before listening to the microphone); (2) a sentence started
   // right after another was stopped is often dropped, so wait a moment then; (3) if it still doesn't start,
