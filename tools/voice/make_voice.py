@@ -71,6 +71,8 @@ def main():
             seen.add(f)
             items.append((f, v, t))
     voices = {v for _, v, _ in items}
+    # The checkout is the commit that started this run; files made by an earlier run may have come after it.
+    subprocess.run(["git", "pull", "-q", "--rebase"])
 
     # Voices no longer chosen: remove their folders (they stay in the history, and come back if chosen again).
     removed = 0
