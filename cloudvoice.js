@@ -43,6 +43,7 @@
     for (const w of SE.safeGet("words") || []) {
       add("A", w.word); // Oxford has most single words; phrases and the rest use this
       [w.context, ...(w.examples || [])].filter(Boolean).slice(0, 3).forEach((t) => add("A", t));
+      (w.myExamples || []).forEach((t) => add("A", t));
     }
     for (const d of [...(window.DIALOGS || []), ...(SE.safeGet("saved") || [])]) {
       for (const l of d.lines || []) add(l[0] === 0 ? "A" : "B", l[1]);
@@ -74,13 +75,15 @@
   async function publish({ force = false } = {}) {
     if (!token() || !window.SE_SYNC || publishing) return;
     const sigOf = (list) => id(voiceOf("A") + voiceOf("B") + list.map((x) => x.f).join());
-    let mine = wanted();
-    if (!force && sigOf(mine) === SE.safeGet("voiceSig")) return; // nothing new since the last check
+    const needEx = () => [...new Set((SE.safeGet("words") || []).filter((w) => (w.exV || 0) < 3).map((w) => w.word.toLowerCase()))].sort();
+    let mine = wanted(), words = needEx();
+    if (!force && sigOf(mine) + words.join() === SE.safeGet("voiceSig")) return; // nothing new since the last check
     publishing = true;
     try {
       const o = await window.SE_SYNC.owner();
       for (let attempt = 0; attempt < 3; attempt++) {
         mine = wanted();
+        words = needEx();
         const { list, sha } = await readList(o);
         const chosenAt = SE.safeGet("aiVoiceAt") || 0;
         if (list?.voices && chosenAt <= (list.at || 0) && (list.voices.A !== voiceOf("A") || list.voices.B !== voiceOf("B"))) {
@@ -93,9 +96,9 @@
         const items = new Map(mine.map((x) => [x.f, x]));
         const sameVoices = list?.voices?.A === voices.A && list?.voices?.B === voices.B;
         if (sameVoices) for (const x of list.items || []) if (!items.has(x.f)) items.set(x.f, x);
-        if (sameVoices && mine.every((x) => (list.items || []).some((y) => y.f === x.f))) break; // already listed
+        if (sameVoices && mine.every((x) => (list.items || []).some((y) => y.f === x.f)) && words.every((w) => (list.words || []).includes(w))) break; // already listed
         const body = { app: "shadow-english", at: Math.max(chosenAt, list?.at || 0), voices,
-          items: [...items.values()].sort((a, b) => (a.f < b.f ? -1 : 1)) };
+          items: [...items.values()].sort((a, b) => (a.f < b.f ? -1 : 1)), words };
         const r = await window.SE_SYNC.gh(`/repos/${o}/${REPO}/contents/${LIST}`, { method: "PUT",
           body: JSON.stringify({ message: "AI voice: sentences to make", content: toB64(JSON.stringify(body)), ...(sha ? { sha } : {}) }) });
         if (r.status === 409 || r.status === 422) continue; // the other device wrote it first: read again
@@ -103,7 +106,7 @@
         C.busyUntil = Date.now() + 25 * 60000; // GitHub is making the audio: look for new files more often
         break;
       }
-      SE.rawSet("voiceSig", sigOf(mine));
+      SE.rawSet("voiceSig", sigOf(mine) + words.join());
       refreshSoon(45000);
     } catch { /* offline or not allowed: try again after the next sync */ } finally { publishing = false; }
   }
@@ -119,6 +122,11 @@
         const j = await r.json();
         C.treeTag = r.headers.get("ETag");
         C.have = new Set(j.tree.filter((x) => x.type === "blob" && x.path.startsWith("audio/")).map((x) => x.path));
+        const ex = j.tree.find((x) => x.path === "examples.json");
+        if (ex && ex.sha !== SE.safeGet("examplesSha")) {
+          const er = await window.SE_SYNC.gh(`/repos/${o}/${REPO}/contents/examples.json`, { headers: { Accept: "application/vnd.github.raw+json" } });
+          if (er.ok) { window.SE_WORDS?.applyDictExamples(await er.json()); SE.rawSet("examplesSha", ex.sha); }
+        }
       }
     } catch { /* offline */ }
     countReady();

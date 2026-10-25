@@ -714,3 +714,12 @@ h2 { font-weight: 800; letter-spacing: -0.02em; }
 /* AI voice picker */
 .pick-row { display: flex; gap: .4rem; align-items: center; }
 .pick-row .select { flex: 1; min-width: 0; }
+
+/* Word list: the learner's own examples, after the app's three */
+.wc-exs .my-ex { color: var(--ink); }
+.ex-src.mine-src { background: var(--leaf-soft); color: var(--leaf); }
+.ex-del { border: 0; background: none; color: var(--ink-3); cursor: pointer; font-size: .8rem; padding: 0 .25rem; opacity: .6; }
+.ex-del:hover { opacity: 1; color: var(--bad); }
+.add-ex { margin-top: .35rem; font-size: .85rem; color: var(--leaf); }
+.add-ex-form { display: flex; gap: .4rem; margin-top: .4rem; flex-wrap: wrap; }
+.add-ex-form .input { flex: 1 1 12rem; min-width: 0; }

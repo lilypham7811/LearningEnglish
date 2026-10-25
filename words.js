@@ -217,6 +217,7 @@
       }
     }
     if (!patch) return;
+    if ((it.exV || 0) >= 3) { delete patch.examples; delete patch.examplesSrc; delete patch.exV; } // keep Cambridge/Oxford examples
     // No Vietnamese meaning (Google's dictionary didn't answer, e.g. busy for this phone): ask MyMemory.
     if (!patch.meaningVi) patch.meaningVi = await myMemoryVi(it.word).catch(() => "");
     // Save the dictionary form: "discussions" -> "discussion". The form actually seen stays in `form`
@@ -529,7 +530,7 @@
     renderList();
     // Words saved while offline (or from the other device) still without a meaning: look them up now.
     // Also upgrades words looked up with the older, weaker dictionary (no Vietnamese meaning).
-    list().filter((w) => (!w.defEn || !w.lemmaChecked || (w.dictSource !== "oxford" && (w.exV !== 2 || !w.meaningVi))) && !tried.has(w.id)).slice(0, 10)
+    list().filter((w) => (!w.defEn || !w.lemmaChecked || (w.dictSource !== "oxford" && ((w.exV || 0) < 2 || !w.meaningVi))) && !tried.has(w.id)).slice(0, 10)
       .forEach((w) => { tried.add(w.id); lookup(w.id, { force: true }); });
   }
   const tried = new Set();
@@ -576,7 +577,7 @@
         ${m.map((x) => `<span class="fam-w">${esc(x.word)}${x.pos ? ` <i>${esc(x.pos)}</i>` : ""}</span>`).join('<span class="fam-dot">·</span>')}
         <span class="muted small">· học cùng nhau, ôn cùng ngày</span></td></tr>`;
     };
-    box.innerHTML = `<thead><tr><th>Từ</th><th>Dạng từ · Phiên âm</th><th>Nghe · Nói thử</th><th>Nghĩa (Oxford)</th><th>Nghĩa tiếng Việt</th><th>3 câu ví dụ thông dụng</th></tr></thead><tbody>` +
+    box.innerHTML = `<thead><tr><th>Từ</th><th>Dạng từ · Phiên âm</th><th>Nghe · Nói thử</th><th>Nghĩa (Oxford)</th><th>Nghĩa tiếng Việt</th><th>Câu ví dụ</th></tr></thead><tbody>` +
       rows.map((w, i) => famHead(w, i) + `<tr data-id="${w.id}"${ui.group && fams.get(famKey(w)).length > 1 ? ' class="in-fam"' : ""}>
         <td data-label="Từ"><b class="wc-word">${esc(w.word)}</b>${w.form && w.form.toLowerCase() !== w.word.toLowerCase() ? `<small class="wc-form" title="Dạng bạn đã gặp">từ “${esc(w.form)}”</small>` : ""}
           <div class="wc-meta">${stageBadge(w, todayIds)}</div>
@@ -590,8 +591,10 @@
         <td data-label="Nghĩa (Oxford)">${w.defEn ? `<div class="wc-def">${esc(w.defEn)}</div>` : `<span class="muted small">${tried.has(w.id) ? "Chưa tìm thấy" : "Đang tra…"}</span>`}
           <a class="wc-ox" href="${oxfordUrl(w.word)}" target="_blank" rel="noopener">${w.dictSource === "oxford" ? "Oxford ↗" : "Xem trên Oxford ↗"}</a></td>
         <td data-label="Nghĩa tiếng Việt">${w.meaningVi ? `<div class="wc-mean">${esc(w.meaningVi)}</div>` : `<a class="small" target="_blank" rel="noopener" href="https://translate.google.com/?sl=en&tl=vi&op=translate&text=${encodeURIComponent(w.word)}">🌐 Google Dịch</a>`}</td>
-        <td data-label="3 câu ví dụ"><ol class="wc-exs">${[...(w.context ? [{ t: w.context, mine: true }] : []), ...(w.examples || []).map((t, i) => ({ t, src: w.examplesSrc?.[i] || "" }))].slice(0, 3)
-          .map((x, i) => `<li${x.mine ? ' class="mine" title="Câu bạn gặp từ này"' : ""}><button type="button" class="ex-say" data-a="ex" data-i="${i}" aria-label="Nghe câu">🔊</button> ${mark(w, x.t)}${x.src ? ` <span class="ex-src">${x.src}</span>` : ""}</li>`).join("") || '<li class="muted">Đang tìm câu ví dụ…</li>'}</ol></td>
+        <td data-label="Câu ví dụ"><ol class="wc-exs">${[...(w.context ? [{ t: w.context, mine: true }] : []), ...(w.examples || []).map((t, i) => ({ t, src: w.examplesSrc?.[i] || "" }))].slice(0, 3)
+          .map((x, i) => `<li${x.mine ? ' class="mine" title="Câu bạn gặp từ này"' : ""}><button type="button" class="ex-say" data-a="ex" data-i="${i}" aria-label="Nghe câu">🔊</button> ${mark(w, x.t)}${x.src ? ` <span class="ex-src">${x.src}</span>` : ""}</li>`).join("") || '<li class="muted">Đang tìm câu ví dụ…</li>'}
+          ${(w.myExamples || []).map((t, i) => `<li class="my-ex"><button type="button" class="ex-say" data-a="myex" data-i="${i}" aria-label="Nghe câu">🔊</button> ${mark(w, t)} <span class="ex-src mine-src">Của tôi</span><button type="button" class="ex-del" data-a="myexdel" data-i="${i}" title="Xóa câu này" aria-label="Xóa câu này">✕</button></li>`).join("")}</ol>
+          <button type="button" class="linkish add-ex" data-a="addex">＋ Thêm ví dụ của bạn</button></td>
       </tr>`).join("") + "</tbody>";
     box.onclick = (e) => {
       if (e.target.closest(".fam-sug")) return famSugClick(e);
@@ -603,6 +606,9 @@
       const exs = [...(w.context ? [w.context] : []), ...(w.examples || [])].slice(0, 3);
       if (b.dataset.a === "say") sayWord(w.word);
       else if (b.dataset.a === "ex") SE.say(exs[+b.dataset.i] || w.word);
+      else if (b.dataset.a === "myex") SE.say(w.myExamples?.[+b.dataset.i] || w.word);
+      else if (b.dataset.a === "myexdel") update(w.id, { myExamples: (w.myExamples || []).filter((_, i) => i !== +b.dataset.i) });
+      else if (b.dataset.a === "addex") addExample(b, w);
       else if (b.dataset.a === "speak") sayIt(w, b, row.querySelector(".wc-score"));
       else if (b.dataset.a === "edit") openEditor(row, w);
       else if (b.dataset.a === "fam") openFamily(row, w);
@@ -670,6 +676,44 @@
       ? "✓ Trình duyệt này đã bật đồng bộ: từ lưu ở đây sẽ tự sang các máy khác."
       : "⚠ Trình duyệt này <b>chưa</b> bật đồng bộ.";
     dlg.showModal();
+  }
+
+  // ＋ Thêm ví dụ của bạn: a sentence of your own, kept after the app's three (spoken by the AI voice too).
+  function addExample(btn, w) {
+    const f = document.createElement("form");
+    f.className = "add-ex-form";
+    f.innerHTML = `<input class="input" maxlength="300" placeholder="Câu của bạn với “${esc(w.word)}”…" aria-label="Câu ví dụ của bạn" />
+      <button class="btn small primary">Lưu</button><button type="button" class="btn small ghost" data-cancel>Huỷ</button>`;
+    btn.replaceWith(f);
+    const inp = f.querySelector("input");
+    inp.focus();
+    f.onsubmit = (e) => {
+      e.preventDefault();
+      let t = inp.value.replace(/\s+/g, " ").trim();
+      if (!t) return renderList();
+      t = t[0].toUpperCase() + t.slice(1);
+      if (!/[.!?]$/.test(t)) t += ".";
+      update(w.id, { myExamples: [...(w.myExamples || []), t] });
+    };
+    f.querySelector("[data-cancel]").onclick = () => renderList();
+    inp.onkeydown = (e) => { if (e.key === "Escape") renderList(); };
+  }
+  // Cambridge/Oxford examples found by GitHub (tools/voice/make_examples.py → examples.json): they go first,
+  // the earlier examples fill up to three. exV 3 = done (also when the dictionaries had none).
+  function applyDictExamples(map) {
+    let changed = false;
+    const out = list().map((w) => {
+      const e = (w.exV || 0) < 3 && map[w.word.toLowerCase()];
+      if (!e) return w;
+      changed = true;
+      const ex = [...(e.ex || [])], src = [...(e.src || [])];
+      const seen = new Set(ex.map((x) => x.toLowerCase()));
+      (w.examples || []).forEach((x, i) => { if (ex.length < 3 && !seen.has(x.toLowerCase())) { ex.push(x); src.push(w.examplesSrc?.[i] || ""); } });
+      return { ...w, examples: ex, examplesSrc: src, exV: 3 };
+    });
+    if (!changed) return;
+    saveList(out);
+    if (!$("view-words").hidden && !ui.review) renderList();
   }
 
   // 🧩: the word's family. Saved members ✓, other common members with ＋ to save them into this family,
@@ -783,7 +827,7 @@
       box.querySelector("[data-end]").onclick = () => { ui.review = null; render(); };
       return;
     }
-    const exs = [...(w.context ? [w.context] : []), ...(w.examples || [])].slice(0, 3);
+    const exs = [...[...(w.context ? [w.context] : []), ...(w.examples || [])].slice(0, 3), ...(w.myExamples || [])];
     const esc_re = (x) => x.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     const blank = (txt) => [w.word, w.form].filter(Boolean).reduce((acc, f) => acc.replace(new RegExp(esc_re(f), "ig"), "_____"), esc(txt));
     box.innerHTML = `<div class="panel-body flash">
@@ -844,6 +888,6 @@
   });
   document.addEventListener("se:synced", () => { updateNav(); if (!$("view-words").hidden && !ui.review) render(); });
 
-  window.SE_WORDS = { save, popover, sayWord, fromText, tapWord };
+  window.SE_WORDS = { save, popover, sayWord, fromText, tapWord, applyDictExamples };
   updateNav();
 })();
