@@ -1,4 +1,4 @@
-// Section 6: "Sổ từ vựng", the learner's word list, shown as a table:
+// Section 2: "Từ vựng", the learner's word list, shown as a table:
 // word | part of speech + IPA | listen + say it | Oxford meaning | Vietnamese meaning | 3 common examples.
 // Words come from: clicking a word in the video subtitles, the box under a video, selecting text anywhere
 // in the app, or right-click "Save word to LearningEnglish" in the browser extension.
@@ -165,7 +165,7 @@
     const key = word.toLowerCase();
     const items = list();
     const have = items.find((x) => x.word.toLowerCase() === key);
-    if (have) { toast(`“${have.word}” đã có trong Sổ từ vựng`); return have; }
+    if (have) { toast(`“${have.word}” đã có trong Từ vựng`); return have; }
     const now = Date.now();
     const it = {
       id: "w" + now.toString(36) + Math.random().toString(36).slice(2, 5),
@@ -177,7 +177,7 @@
     };
     saveList([it, ...items]);
     SE.track("word");
-    toast(`⭐ Đã lưu “${it.word}” vào Sổ từ vựng`);
+    toast(`⭐ Đã lưu “${it.word}” vào Từ vựng`);
     if (!$("view-words").hidden) render();
     lookup(it.id);
     return it;
@@ -227,7 +227,7 @@
       const twin = list().find((x) => x.id !== id && x.word.toLowerCase() === lemma.toLowerCase());
       if (twin) {
         saveList(list().filter((x) => x.id !== id));
-        toast(`“${it.word}” là dạng của “${twin.word}”, từ này đã có trong sổ.`);
+        toast(`“${it.word}” là dạng của “${twin.word}”, từ này đã có trong Từ vựng.`);
         if (!$("view-words").hidden && !ui.review) render();
         return;
       }
@@ -244,7 +244,7 @@
     const word = clean(value);
     if (!it || !word || word === it.word) return false;
     const twin = list().find((x) => x.id !== id && x.word.toLowerCase() === word.toLowerCase());
-    if (twin) { toast(`“${twin.word}” đã có trong sổ.`); return false; }
+    if (twin) { toast(`“${twin.word}” đã có trong Từ vựng.`); return false; }
     update(id, { word, form: it.form || it.word, pos: "", ipa: "", defEn: "", meaningVi: "", examples: [], dictSource: null, lemmaChecked: true, manual: true });
     tried.add(id);
     lookup(id, { force: true, keepWord: true });
@@ -414,8 +414,8 @@
     const root = $("view-words");
     const all = list();
     const mastered = all.filter((w) => w.stage >= MASTERED).length;
-    root.innerHTML = `<div class="vhead"><div><p class="eyebrow">Phần 5 · Sổ từ vựng</p><h2>Sổ từ vựng</h2></div>
-        <dl class="stat-list" aria-label="Thống kê sổ từ vựng">
+    root.innerHTML = `<div class="vhead"><div><p class="eyebrow">Phần 2 · Từ vựng</p><h2>Từ vựng</h2></div>
+        <dl class="stat-list" aria-label="Thống kê từ vựng">
           <div style="--pc:var(--r5)"><dt>Tổng số từ</dt><dd>${all.length}</dd></div>
           <div style="--pc:var(--r1)"><dt>Ôn hôm nay</dt><dd>${due().length}</dd></div>
           <div style="--pc:var(--turmeric)"><dt>Từ mới chờ học</dt><dd>${all.filter((w) => w.stage === 0).length}</dd></div>
@@ -430,7 +430,7 @@
           <button type="button" class="btn ghost" id="wordPaste" title="Dán từ hoặc câu đã chép ở app khác">📋 Dán</button>
         </form>
         <div class="search"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5 14 14"/></svg>
-          <input class="input" type="search" id="wordSearch" placeholder="Tìm trong sổ…" value="${esc(ui.q)}" /></div>
+          <input class="input" type="search" id="wordSearch" placeholder="Tìm từ…" value="${esc(ui.q)}" /></div>
       </div>
       <div class="lib-tools">
         <div class="seg" id="wordFilter">${[["all", "Tất cả"], ["due", "Ôn hôm nay"], ["learning", "Đang học"], ["mastered", "Đã thuộc"], ["video", "Từ video"]]
@@ -514,7 +514,7 @@
       (ui.f === "all" || (ui.f === "due" && todayIds.has(w.id)) || (ui.f === "learning" && w.stage < MASTERED) ||
        (ui.f === "mastered" && w.stage >= MASTERED) || (ui.f === "video" && w.sourceKind === "video")));
     if (!items.length) {
-      box.innerHTML = `<tbody><tr><td class="empty-row">${list().length ? "Không có từ nào ở đây. Thử bộ lọc khác." : "Sổ từ vựng còn trống. Mở một video, bấm vào một từ trong phụ đề (hoặc gõ vào ô dưới video) rồi chọn ⭐ Lưu từ."}</td></tr></tbody>`;
+      box.innerHTML = `<tbody><tr><td class="empty-row">${list().length ? "Không có từ nào ở đây. Thử bộ lọc khác." : "Từ vựng còn trống. Mở một video, bấm vào một từ trong phụ đề (hoặc gõ vào ô dưới video) rồi chọn ⭐ Lưu từ."}</td></tr></tbody>`;
       return;
     }
     // Families together: in the order the family first appears, members one after another.
@@ -562,7 +562,7 @@
       else if (b.dataset.a === "speak") sayIt(w, b, row.querySelector(".wc-score"));
       else if (b.dataset.a === "edit") openEditor(row, w);
       else if (b.dataset.a === "fam") openFamily(row, w);
-      else if (b.dataset.a === "del" && confirm(`Xóa “${w.word}” khỏi Sổ từ vựng?`)) { saveList(list().filter((x) => x.id !== w.id)); render(); }
+      else if (b.dataset.a === "del" && confirm(`Xóa “${w.word}” khỏi Từ vựng?`)) { saveList(list().filter((x) => x.id !== w.id)); render(); }
     };
   }
   // ---------- Text from the phone (paste, Share menu) ----------
@@ -647,14 +647,14 @@
     const chips = [
       ...mates.map((x) => `<span class="fam-chip have">✓ ${esc(x.word)}${x.pos ? ` <i>${esc(x.pos)}</i>` : ""}</span>`),
       ...sug.filter((x) => !mates.some((m) => m.word.toLowerCase() === x.word)).map((x) => have.has(x.word)
-        ? `<span class="fam-chip have" title="Đã có trong sổ, ở họ khác">✓ ${esc(x.word)}</span>`
-        : `<button type="button" class="fam-chip add" data-add="${esc(x.word)}" title="Lưu vào sổ, cùng họ với ${esc(w.word)}">＋ ${esc(x.word)}${x.pos.length ? ` <i>${x.pos.map((p) => POS_VI[p]).join(", ")}</i>` : ""}</button>`),
+        ? `<span class="fam-chip have" title="Đã lưu, ở họ khác">✓ ${esc(x.word)}</span>`
+        : `<button type="button" class="fam-chip add" data-add="${esc(x.word)}" title="Lưu, cùng họ với ${esc(w.word)}">＋ ${esc(x.word)}${x.pos.length ? ` <i>${x.pos.map((p) => POS_VI[p]).join(", ")}</i>` : ""}</button>`),
     ];
     tr.innerHTML = `<td colspan="6"><div class="fam-box"><b>🧩 Họ từ của “${esc(w.word)}”</b>
       <div class="fam-chips">${chips.join("") || `<span class="muted small">Chưa tìm thấy từ cùng họ thông dụng.</span>`}</div>
       <div class="fam-foot">${mates.length ? `<button type="button" class="btn small ghost" data-split>Tách “${esc(w.word)}” khỏi họ này</button>` : ""}
         ${w.familyKey === w.word.toLowerCase() ? `<button type="button" class="btn small ghost" data-join>Gom lại theo họ tự động</button>` : ""}
-        <span class="muted small">Bấm ＋ để lưu từ đó vào sổ; các từ cùng họ được học và ôn cùng ngày.</span></div></div></td>`;
+        <span class="muted small">Bấm ＋ để lưu từ đó; các từ cùng họ được học và ôn cùng ngày.</span></div></div></td>`;
   }
   async function famSugClick(e) {
     const tr = e.target.closest(".fam-sug");
@@ -795,7 +795,7 @@
     closePop();
     if (e.detail !== "words") return;
     ui.review = null;
-    SE.startSession({ id: "words", title: "Sổ từ vựng", titleVi: "Sổ từ vựng" }, "words");
+    SE.startSession({ id: "words", title: "Từ vựng", titleVi: "Từ vựng" }, "words");
     render();
   });
   document.addEventListener("se:synced", () => { updateNav(); if (!$("view-words").hidden && !ui.review) render(); });

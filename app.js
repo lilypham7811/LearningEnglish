@@ -1432,7 +1432,7 @@ Name2: English sentence | Vietnamese translation`;
   const fmtDur = (s) => s < 60 ? `${s} giây` : s < 3600 ? `${Math.round(s / 60)} phút` : `${Math.floor(s / 3600)} giờ ${Math.round((s % 3600) / 60)} phút`;
   const ACT_NAMES = { listen: "Nghe", shadow: "Nhại câu", record: "Ghi âm", chunk: "Từng cụm", roleplay: "Nhập vai", ai: "Nói với Google AI",
     open: "Mở link", read: "Đọc", chat: "Hỏi Google AI", phrase: "Luyện cụm từ", prompter: "Đọc chạy chữ", speech: "Ghi âm bài nói", feedback: "AI nhận xét", word: "Lưu từ", review: "Ôn từ" };
-  const KIND_NAMES = { talk: "Hội thoại", video: "Video", article: "Bài báo", speech: "Phát biểu", words: "Sổ từ vựng" };
+  const KIND_NAMES = { talk: "Hội thoại", video: "Video", article: "Bài báo", speech: "Phát biểu", words: "Từ vựng" };
 
   function updateNavProgress() {
     const today = dayKey(Date.now());

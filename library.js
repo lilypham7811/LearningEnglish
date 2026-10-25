@@ -10,19 +10,19 @@
 
   const KINDS = {
     video: {
-      key: "videos", eyebrow: "Phần 2 · Video tin tức", h2: "Video YouTube đã lưu",
+      key: "videos", eyebrow: "Phần 3 · Video tin tức", h2: "Video YouTube đã lưu",
       hint: "Mở video trên YouTube, bấm chuột phải vào trang → <b>Save to LearningEnglish</b>. Hoặc dán link vào ô dưới.",
       empty: "Chưa có video nào. Lưu một bản tin YouTube để bắt đầu.", unit: "video",
       chips: [["phrases3", "✨ 3 cụm từ hay nhất"], ["vocab", "📚 Từ mới"], ["transcript", "📝 Lời thoại"], ["summary", "📰 Tóm tắt"], ["live", "🎙️ Luyện nói về video"]],
     },
     article: {
-      key: "articles", eyebrow: "Phần 3 · Bài báo", h2: "Bài báo để đọc",
+      key: "articles", eyebrow: "Phần 4 · Bài báo", h2: "Bài báo để đọc",
       hint: "Mở bài báo, bấm chuột phải → <b>Save to LearningEnglish</b> (tự lưu cả nội dung). Hoặc dán link vào ô dưới.",
       empty: "Chưa có bài báo nào. Lưu một bài tin tức tiếng Anh để bắt đầu.", unit: "bài",
       chips: [["phrases5", "✨ 3–5 câu hay nhất để luyện"], ["vocab", "📚 Từ mới"], ["summary", "📰 Tóm tắt dễ hiểu"], ["live", "🎙️ Luyện nói về bài này"]],
     },
     speech: {
-      key: "speeches", eyebrow: "Phần 4 · Phát biểu", h2: "Trở thành người nói hay nhất",
+      key: "speeches", eyebrow: "Phần 5 · Phát biểu", h2: "Trở thành người nói hay nhất",
       hint: "Dán bài phát biểu, hoặc nhờ Google AI viết. Mỗi ngày: đọc chạy chữ, ghi âm, nghe AI nhận xét, rồi nói lại hay hơn.",
       empty: "Chưa có bài phát biểu nào. Dán một bài hoặc nhờ AI viết bài đầu tiên.", unit: "bài",
       chips: [["critique", "🎯 Góp ý bài viết"], ["phrases5", "✨ Cụm từ đắt giá"], ["delivery", "🗣️ Cách nói bài này"], ["live", "🎤 Tập trả lời khán giả"]],
@@ -351,7 +351,7 @@
       item = updateItem(kind, id, { chat: msgs });
       return run(kind, id, async (status) => {
         const t = await sourceText(kind, getItem(kind, id), status, { needCues: true });
-        return { role: "model", text: "Phụ đề đã hiện **ngay dưới video** và chạy theo video. **Bấm vào một từ** (ví dụ một từ mới) để lưu vào **Sổ từ vựng**. Danh sách lời thoại đầy đủ ở mục **📝 Lời thoại**.\n\n" + t.slice(0, 400) + (t.length > 400 ? "…" : "") };
+        return { role: "model", text: "Phụ đề đã hiện **ngay dưới video** và chạy theo video. **Bấm vào một từ** (ví dụ một từ mới) để lưu vào **Từ vựng**. Danh sách lời thoại đầy đủ ở mục **📝 Lời thoại**.\n\n" + t.slice(0, 400) + (t.length > 400 ? "…" : "") };
       });
     }
     const A = ACTIONS[action];
@@ -795,7 +795,7 @@
     }
     box.innerHTML = `<div class="sub-setup">
       <b>💬 Phụ đề bấm được chữ</b>
-      <p class="hint small">Để bấm vào một từ trong phụ đề (ví dụ <i>laudable</i>) và lưu vào Sổ từ vựng, app cần lời thoại có thời gian:</p>
+      <p class="hint small">Để bấm vào một từ trong phụ đề (ví dụ <i>laudable</i>) và lưu vào Từ vựng, app cần lời thoại có thời gian:</p>
       ${SE.geminiKey() ? `<button type="button" class="btn primary" data-make-subs>✨ Tạo phụ đề bằng Google AI</button>` : ""}
       <details class="paste-more" ${SE.geminiKey() ? "" : "open"}><summary>📋 Dán lời thoại từ YouTube (không cần khoá)</summary>
         <ol class="hint small"><li>Mở video trên YouTube (máy tính), bấm <b>…thêm</b> dưới video → <b>Hiện bản chép lời</b> (Show transcript).</li>
@@ -1207,7 +1207,7 @@
   window.addEventListener("hashchange", takeFromAddress);
 
   // ---------- Shared from the phone ----------
-  // iPhone: the "Lưu vào Sổ từ vựng" shortcut in the Share menu opens …/#share=<text or link>.
+  // iPhone: the "Lưu vào Từ vựng" shortcut in the Share menu opens …/#share=<text or link>.
   // Android: the installed app is in the Share menu (share_target in the manifest): ?share_text=…&share_url=…
   // A YouTube link → saved video; a link alone → saved article; any other text → words (with a picker).
   function takeShared() {
