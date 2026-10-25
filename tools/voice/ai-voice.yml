@@ -1,5 +1,6 @@
 # Copy of .github/workflows/ai-voice.yml in the private sync repo (shadow-english-sync), kept here with the app.
-# Runs when the app updates voice.json: looks up Cambridge/Oxford examples for new words (make_examples.py),
+# Runs when the app updates voice.json: fetches the text of articles saved by link only (make_articles.py),
+# looks up Cambridge/Oxford examples for new words (make_examples.py),
 # then makes the missing AI-voice audio (make_voice.py), and commits both.
 # Free: GitHub gives private repos 2,000 minutes a month; a few new words take about 2 minutes.
 name: AI voice
@@ -32,10 +33,11 @@ jobs:
           B=https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0
           [ -s kokoro-v1.0.onnx ] || curl -sSfLo kokoro-v1.0.onnx "$B/kokoro-v1.0.onnx"
           [ -s voices-v1.0.bin ] || curl -sSfLo voices-v1.0.bin "$B/voices-v1.0.bin"
-      - run: pip install -q kokoro-onnx==0.4.7 lameenc==1.9.0 beautifulsoup4==4.15.0
-      - name: Dictionary examples, then audio
+      - run: pip install -q kokoro-onnx==0.4.7 lameenc==1.9.0 beautifulsoup4==4.15.0 trafilatura==2.3.1
+      - name: Article text, dictionary examples, then audio
         run: |
           git config user.name "AI voice"
           git config user.email "ai-voice@users.noreply.github.com"
+          python .github/voice/make_articles.py
           python .github/voice/make_examples.py
           python .github/voice/make_voice.py ~/kokoro

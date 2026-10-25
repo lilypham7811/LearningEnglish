@@ -575,6 +575,7 @@
       <span class="cmd-ic" aria-hidden="true">${kind === "video" ? "▶️" : "📰"}</span>
       <input class="cmd-input" name="url" type="url" required autocomplete="off" aria-label="${ph}" placeholder="${ph}" />
       <button class="btn primary">Lưu</button>
+      <button type="button" class="btn ghost" data-paste-link title="Lưu link vừa chép ở YouTube, Safari…">📋 Dán link</button>
     </form>`;
   }
 
@@ -587,6 +588,18 @@
       if (open) pasteForm.querySelector("textarea").focus();
     };
     root.querySelectorAll("[data-paste-toggle]").forEach((b) => { b.onclick = () => togglePaste(); });
+    // 📋 Dán link: read the copied link (iPhone asks once with a small "Dán" bubble) and save it.
+    root.querySelectorAll("[data-paste-link]").forEach((b) => {
+      b.onclick = async () => {
+        const f = b.closest("form"), inp = f.querySelector('input[name="url"]');
+        let t = "";
+        try { t = await navigator.clipboard.readText(); } catch { /* not allowed here */ }
+        const url = (t.match(/https?:\/\/\S+/) || [""])[0];
+        if (!url) { inp.focus(); return toast("Chưa thấy link nào đã chép. Chép link rồi bấm lại, hoặc giữ ngón tay vào ô này và chọn Dán."); }
+        inp.value = url;
+        f.requestSubmit();
+      };
+    });
     root.querySelectorAll("form.addform").forEach((f) => {
       f.onsubmit = async (e) => {
         e.preventDefault();
@@ -1245,6 +1258,19 @@
   });
   window.postMessage({ source: "se-app", type: "ready" }, location.origin);
 
-  window.SE_LIB = { gemini, toast };
+  // Article text found by GitHub for articles saved by link only (tools/voice/make_articles.py → articles.json).
+  function applyArticleTexts(map) {
+    for (const a of list("article")) {
+      const e = !a.text && !a.textTried && map[a.url];
+      if (!e) continue;
+      const bare = (h) => (h || "").replace(/^www\./, "");
+      const placeholder = !a.title || bare(a.title) === bare(hostOf(a.url)) || a.title === "Bài báo";
+      updateItem("article", a.id, e.text
+        ? { text: e.text, excerpt: e.text.slice(0, 260), textTried: true, ...(placeholder && e.title ? { title: e.title } : {}), ...(e.site && !a.site ? { site: e.site } : {}) }
+        : { textTried: true });
+    }
+    if (!$("view-article").hidden) render("article");
+  }
+  window.SE_LIB = { gemini, toast, applyArticleTexts };
   updateNav();
 })();
