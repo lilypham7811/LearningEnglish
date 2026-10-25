@@ -36,6 +36,18 @@ def publish(n):
     raise SystemExit("push failed")
 
 
+def voices_changed(voices):
+    """The learner chose other voices since this run started: stop, the next run makes those."""
+    if subprocess.run(["git", "fetch", "-q"]).returncode != 0:
+        return False
+    shown = subprocess.run(["git", "show", "origin/main:voice.json"], capture_output=True)
+    try:
+        now = json.loads(shown.stdout.decode("utf-8"))
+        return {x.get("v") for x in now.get("items", [])} != voices
+    except Exception:
+        return False
+
+
 def mp3(samples, rate):
     enc = lameenc.Encoder()
     enc.set_bit_rate(64)
@@ -93,6 +105,9 @@ def main():
         if since >= BATCH_FILES or time.time() - last > BATCH_SECONDS:
             publish(since)
             since, last = 0, time.time()
+            if voices_changed(voices):
+                print("voices changed: stopping")
+                return
     publish(since)
     print(f"made {made}")
 
