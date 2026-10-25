@@ -1,7 +1,9 @@
 // Natural AI voice, free: Kokoro (open model, Apache-2.0) running on this computer's graphics card (WebGPU).
 // Measured: ~0.6 s to make 3 s of speech after the first sentence; first use downloads the model (~330 MB) once.
 // Every sentence spoken is kept in the browser (Cache Storage), so replaying it is instant and works offline.
-// Without WebGPU (most phones) the app keeps using the device's own voices.
+// Without WebGPU, and on iPhone/iPad, it is off: there the model is too heavy to make a sentence quickly, and
+// iPhone only plays sound that starts right after a tap, so a sentence ready seconds later stayed silent.
+// iPhone uses Google's voice instead (app.js).
 (() => {
   "use strict";
   const SE = window.SE;
@@ -14,7 +16,13 @@
     ["am_michael", "Michael (nam, Mỹ)"], ["am_fenrir", "Fenrir (nam, Mỹ)"], ["am_puck", "Puck (nam, Mỹ)"], ["bm_george", "George (nam, Anh)"],
   ];
 
-  const supported = !!navigator.gpu;
+  const isIOS = /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  const supported = !!navigator.gpu && !isIOS;
+  // Turned on earlier on an iPhone: switch it off and free the downloaded model (about 330 MB) and its sentences.
+  if (isIOS && SE.safeGet("aiVoice")) {
+    SE.safeSet("aiVoice", false);
+    caches.keys().then((keys) => keys.filter((k) => k === CACHE || /transformers/i.test(k)).forEach((k) => caches.delete(k))).catch(() => {});
+  }
   const V = { tts: null, loading: null, audio: null, mem: new Map() };
   const enabled = () => supported && !!SE.safeGet("aiVoice");
   const voiceFor = (which) => SE.safeGet(which === "B" ? "aiVoiceB" : "aiVoiceA") || (which === "B" ? "am_michael" : "af_heart");
@@ -90,6 +98,10 @@
   function settingsUi() {
     const box = $("aiVoiceBox");
     if (!box) return;
+    if (isIOS) {
+      box.innerHTML = `<p class="hint small">✨ <b>Giọng AI tự nhiên</b> chỉ dùng trên máy tính. Trên iPhone, app đọc bằng <b>giọng Google</b> (giọng Mỹ, người nói thứ hai giọng Anh) và từ vựng bằng <b>bản ghi âm Oxford</b>.</p>`;
+      return;
+    }
     if (!supported) {
       box.innerHTML = `<p class="hint small">✨ <b>Giọng AI tự nhiên</b> cần máy tính có card đồ hoạ (Chrome hoặc Edge). Trên <b>iPhone</b>, tải giọng Siri chất lượng cao miễn phí: <b>Cài đặt → Trợ năng → Nội dung được đọc → Giọng nói → Tiếng Anh</b> → chọn một giọng có chữ <b>“Nâng cao”</b> hoặc <b>“Cao cấp”</b> (ví dụ Ava, Zoe, Evan) → tải về. Sau đó mở lại app và chọn giọng đó ở ô Người nói A/B bên dưới.</p>`;
       return;
