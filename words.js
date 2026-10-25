@@ -20,6 +20,7 @@
   const FUZZ = [0, 1, 2, 3, 3];        // days a review may move (earlier/later) to keep days under the limit
   const MASTERED = OFFSETS.length + 1;
   const DAILY = 10;                    // at most 10 words a day: reviews that are due first, then new words
+  const NEW_MIN = 3;                   // …but always room for 3 new words, so every saved word gets its turn
   const pref = (k, d) => { try { return localStorage.getItem("se_" + k) ?? d; } catch { return d; } };
   const setPref = (k, v) => { try { localStorage.setItem("se_" + k, v); } catch { /* private mode */ } };
   const ui = { q: "", f: "all", review: null, group: pref("wordsGroup", "1") === "1", accent: pref("accent", "gb") };
@@ -112,20 +113,42 @@
     return SE.say(word);
   }
 
-  // Today's list, at most DAILY words including those already reviewed today:
-  // due reviews first (most overdue, then earliest stage), then new words (oldest saved first).
-  function todayQueue(all = list()) {
-    const left = Math.max(0, DAILY - all.filter(reviewedToday).length);
+  // Today's list, at most DAILY words including those already reviewed today: due reviews (most overdue,
+  // then earliest step), with at least NEW_MIN places kept for new words (oldest saved first), so the list
+  // moves on through every saved word. Reviews that don't fit wait for tomorrow. extra: "Học thêm" after that.
+  function todayQueue(all = list(), extra = 0) {
+    const left = Math.max(0, DAILY - all.filter(reviewedToday).length) + extra;
     const reviews = all.filter((w) => isDue(w) && !reviewedToday(w)).sort((a, b) => a.due - b.due || a.stage - b.stage);
-    const fresh = all.filter((w) => w.stage === 0 && !reviewedToday(w)).sort((a, b) => a.savedAt - b.savedAt);
-    // Words of one family come one after another, and a new word brings its new family members along.
-    const cands = [...reviews, ...fresh], seen = new Set(), out = [];
-    for (const w of cands) {
-      if (seen.has(w.id)) continue;
-      const k = famKey(w);
-      for (const x of cands) if (!seen.has(x.id) && famKey(x) === k) { seen.add(x.id); out.push(x); }
+    const freshAll = all.filter((w) => w.stage === 0 && !reviewedToday(w)).sort((a, b) => a.savedAt - b.savedAt);
+    // A new word brings its new family members along (they are learned together).
+    const fresh = [], seenF = new Set();
+    for (const w of freshAll) {
+      if (seenF.has(w.id)) continue;
+      for (const x of freshAll) if (!seenF.has(x.id) && famKey(x) === famKey(w)) { seenF.add(x.id); fresh.push(x); }
     }
-    return out.slice(0, left);
+    const nNew = Math.min(fresh.length, left, Math.max(NEW_MIN, left - reviews.length));
+    const chosen = [...reviews.slice(0, left - nNew), ...fresh.slice(0, nNew)];
+    // Words of one family come one after another.
+    const seen = new Set(), out = [];
+    for (const w of chosen) {
+      if (seen.has(w.id)) continue;
+      for (const x of chosen) if (!seen.has(x.id) && famKey(x) === famKey(w)) { seen.add(x.id); out.push(x); }
+    }
+    return out;
+  }
+  // One answer → the word's next step. Remembered: the next step of the 1/3/7/14/30-day schedule (a new word
+  // starts today). Forgotten (or remembered only after forgetting today): back to the first step, so again
+  // tomorrow. A word that was studied is never "new" again.
+  function advance(w, ok, failedToday = false) {
+    const now = Date.now();
+    if (ok && !failedToday) {
+      const learnedAt = w.stage === 0 ? now : w.learnedAt || now;
+      const stage = Math.min(w.stage + 1, MASTERED);
+      // A family member already answered today at the same step → the same review day, so they stay together.
+      const mate = siblings(w).find((x) => x.stage === stage && x.due != null && reviewedToday(x));
+      return { stage, learnedAt, lastReview: now, due: stage >= MASTERED ? null : mate ? mate.due : pickDay(learnedAt, stage, w.id) };
+    }
+    return { stage: 1, learnedAt: now, lastReview: now, due: pickDay(now, 1, w.id) };
   }
   const due = () => todayQueue();
   // Pick the review day: the planned day (learning day + 1/3/7/14/30), moved up to FUZZ days earlier or
@@ -151,6 +174,8 @@
   const oxfordUrl = (w) => `https://www.oxfordlearnersdictionaries.com/search/english/?q=${encodeURIComponent(w.toLowerCase())}`;
   // Words saved before the new schedule (box/due, one example) get the new fields.
   function upgrade(w) {
+    // Studied before but sent back to "new" by the old "Chưa nhớ": first step, due the day after that review.
+    if (w.stage === 0 && w.lastReview) return { ...w, stage: 1, learnedAt: w.lastReview, due: startOfDay(w.lastReview) + DAY };
     if (w.stage != null) return w;
     const learnedAt = w.learnedAt || w.savedAt || Date.now();
     const stage = Math.min(w.box || 0, MASTERED);
@@ -604,9 +629,9 @@
       const w = list().find((x) => x.id === row.dataset.id);
       if (!w) return;
       const exs = [...(w.context ? [w.context] : []), ...(w.examples || [])].slice(0, 3);
-      if (b.dataset.a === "say") sayWord(w.word);
-      else if (b.dataset.a === "ex") SE.say(exs[+b.dataset.i] || w.word);
-      else if (b.dataset.a === "myex") SE.say(w.myExamples?.[+b.dataset.i] || w.word);
+      if (b.dataset.a === "say") { sayWord(w.word); studied(w.id, "word"); }
+      else if (b.dataset.a === "ex") { SE.say(exs[+b.dataset.i] || w.word); studied(w.id, "ex"); }
+      else if (b.dataset.a === "myex") { SE.say(w.myExamples?.[+b.dataset.i] || w.word); studied(w.id, "ex"); }
       else if (b.dataset.a === "myexdel") update(w.id, { myExamples: (w.myExamples || []).filter((_, i) => i !== +b.dataset.i) });
       else if (b.dataset.a === "addex") addExample(b, w);
       else if (b.dataset.a === "speak") sayIt(w, b, row.querySelector(".wc-score"));
@@ -769,6 +794,25 @@
     f.querySelector("[data-cancel]").onclick = () => renderList();
     inp.onkeydown = (e) => { if (e.key === "Escape") renderList(); };
   }
+  // Studying a word in the list counts as today's review (if it is due today, or new): hearing the word and
+  // one of its examples, or saying it well (Nói thử ≥ 70%).
+  const heard = new Map(); // word id → { word, ex }
+  function studied(id, what) {
+    const h = heard.get(id) || {};
+    h[what] = true;
+    heard.set(id, h);
+    if (what === "speak" || (h.word && h.ex)) creditReview(id);
+  }
+  function creditReview(id) {
+    const w = list().find((x) => x.id === id);
+    if (!w || reviewedToday(w) || w.stage >= MASTERED || !(isDue(w) || w.stage === 0)) return;
+    const patch = advance(w, true);
+    update(w.id, patch);
+    const days = patch.due ? Math.round((patch.due - today()) / DAY) : 0;
+    toast(`✓ Đã tính là đã ôn “${w.word}”${patch.due ? ` · ôn lại sau ${days} ngày` : " · đã thuộc"}`);
+    if (!$("view-words").hidden && !ui.review) renderReview();
+    updateNav();
+  }
   async function sayIt(w, btn, out) {
     if (!SE.hasRecognition) return toast("Trình duyệt này không chấm điểm được. Hãy dùng Chrome, Edge hoặc Safari.");
     btn.textContent = "🎙️ Đang nghe…";
@@ -778,6 +822,7 @@
     if (!res.text) { out.textContent = "Chưa nghe thấy gì."; return; }
     const r = SE.compareWords(w.word, res.text);
     SE.trackScore(r.score);
+    if (r.score >= 70) studied(w.id, "speak");
     out.innerHTML = `<span class="badge ${r.score >= 80 ? "good" : r.score >= 60 ? "ok" : "low"}">${r.score}%</span> <span class="muted small">${esc(res.text)}</span>`;
   }
 
@@ -805,8 +850,8 @@
         <div class="rv-text"><b>${d.length ? `Hôm nay ôn ${d.length} từ` : list().some(reviewedToday) ? `Hôm nay đã ôn xong (${list().filter(reviewedToday).length} từ)` : list().length ? "Hôm nay không có từ cần ôn" : "Chưa có từ để ôn"}</b>
           ${d.length ? `<span class="muted small">(${d.filter((w) => w.stage >= 1).length} ôn lại · ${d.filter((w) => w.stage === 0).length} từ mới)</span>` : ""}
           <span class="muted small">${nextReview()}</span>
-          <span class="rv-info" tabindex="0" title="Mỗi ngày tối đa 10 từ: từ đến hạn ôn trước, rồi đến từ mới. Mỗi từ được ôn lại sau 1 ngày, 3 ngày, 1 tuần, 2 tuần và 1 tháng kể từ ngày học (có thể xê dịch 1–3 ngày để không ngày nào quá 10 từ). Ôn đủ 5 lần là đã thuộc. Bấm “Chưa nhớ” thì từ đó học lại từ đầu." aria-label="Lịch ôn: tối đa 10 từ mỗi ngày; ôn lại sau 1, 3, 7, 14 và 30 ngày">ⓘ</span></div>
-        <div class="toolbar">${d.length ? `<button class="btn primary" data-start>Bắt đầu ôn</button>` : ""}
+          <span class="rv-info" tabindex="0" title="Mỗi ngày tối đa 10 từ: từ đến hạn ôn trước, rồi đến từ mới. Mỗi từ được ôn lại sau 1 ngày, 3 ngày, 1 tuần, 2 tuần và 1 tháng kể từ ngày học (có thể xê dịch 1–3 ngày để không ngày nào quá 10 từ). Ôn đủ 5 lần là đã thuộc. Bấm “Chưa nhớ” thì ngày mai ôn lại từ đó. Mỗi ngày luôn có ít nhất 3 từ mới. Nghe từ và một câu ví dụ, hoặc Nói thử đạt 70%, trong bảng bên dưới cũng được tính là đã ôn." aria-label="Lịch ôn: tối đa 10 từ mỗi ngày; ôn lại sau 1, 3, 7, 14 và 30 ngày">ⓘ</span></div>
+        <div class="toolbar">${d.length ? `<button class="btn primary" data-start>Bắt đầu ôn</button>` : todayQueue(list(), 5).length ? `<button class="btn" data-more>＋ Học thêm 5 từ</button>` : ""}
           ${list().length ? `<button class="btn" data-voice>🎙️ Ôn bằng giọng nói</button>` : ""}</div>
       </div>`;
       // Voice review in ChatGPT / Gemini: today's words, or the 12 newest if none are due.
@@ -818,60 +863,87 @@
         ui.review = { queue: d.map((w) => w.id), shown: false, done: 0, again: new Set() };
         renderReview();
       });
+      box.querySelector("[data-more]")?.addEventListener("click", () => {
+        ui.review = { queue: todayQueue(list(), 5).map((w) => w.id), shown: false, done: 0, again: new Set() };
+        renderReview();
+      });
       return;
     }
     const R = ui.review;
     const w = list().find((x) => x.id === R.queue[0]);
+    // ◀ Trước undoes the last step (answer, skip or "Thuộc rồi"): the word's schedule and the round as they were.
+    const back = () => {
+      const h = R.history?.pop();
+      if (!h) return;
+      if (h.before) update(h.id, h.before);
+      R.queue = h.queue;
+      R.again = new Set(h.again);
+      R.done = h.done;
+      R.shown = false;
+      renderReview();
+      updateNav();
+    };
     if (!w) {
-      box.innerHTML = `<div class="panel-body review-start"><div><b>🎉 Xong! Đã ôn ${R.done} từ hôm nay.</b></div><button class="btn" data-end>Đóng</button></div>`;
+      box.innerHTML = `<div class="panel-body review-start"><div><b>🎉 Xong! Đã ôn ${R.done} từ hôm nay.</b></div>
+        <div class="toolbar">${R.history?.length ? `<button class="btn ghost" data-back>◀ Trước</button>` : ""}<button class="btn" data-end>Đóng</button></div></div>`;
       box.querySelector("[data-end]").onclick = () => { ui.review = null; render(); };
+      box.querySelector("[data-back]")?.addEventListener("click", back);
       return;
     }
     const exs = [...[...(w.context ? [w.context] : []), ...(w.examples || [])].slice(0, 3), ...(w.myExamples || [])];
     const esc_re = (x) => x.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     const blank = (txt) => [w.word, w.form].filter(Boolean).reduce((acc, f) => acc.replace(new RegExp(esc_re(f), "ig"), "_____"), esc(txt));
     box.innerHTML = `<div class="panel-body flash">
-      <div class="muted small">Còn ${R.queue.length} từ · ${STAGE_NAMES[Math.min(w.stage, STAGE_NAMES.length - 1)]}</div>
+      <div class="flash-nav"><button type="button" class="btn small ghost" data-back ${R.history?.length ? "" : "disabled"}>◀ Trước</button>
+        <span class="muted small">Còn ${R.queue.length} từ · ${STAGE_NAMES[Math.min(w.stage, STAGE_NAMES.length - 1)]}</span>
+        <button type="button" class="btn small ghost" data-next title="Bỏ qua từ này lần này (vẫn ôn vào lần sau)">Tiếp ▶</button></div>
       <div class="flash-word">${esc(w.word)} <button type="button" class="btn small" data-say>🔊</button></div>
       ${R.shown ? `<div class="muted">${esc([w.pos, w.ipa].filter(Boolean).join(" · "))}</div>
           ${w.meaningVi ? `<div class="wc-mean">${esc(w.meaningVi)}</div>` : ""}${w.defEn ? `<div class="wc-def">${esc(w.defEn)}</div>` : ""}
-          ${exs.length ? `<ol class="wc-exs">${exs.map((s) => `<li>${mark(w, s)}</li>`).join("")}</ol>` : ""}
+          ${exs.length ? `<ol class="wc-exs">${exs.map((s, i) => `<li><button type="button" class="ex-say" data-fex="${i}" aria-label="Nghe câu">🔊</button> ${mark(w, s)}</li>`).join("")}</ol>` : ""}
           ${siblings(w).length ? `<div class="flash-fam">🧩 Cùng họ: ${siblings(w).map((x) => `<b>${esc(x.word)}</b>${x.pos ? ` <i>${esc(x.pos)}</i>` : ""}${x.meaningVi ? ` – ${esc(x.meaningVi.split(/[;,]/)[0])}` : ""}`).join(" · ")}</div>` : ""}
-          <div class="toolbar flash-acts"><button class="btn" data-again>😕 Chưa nhớ</button><button class="btn primary" data-good>🙂 Nhớ rồi</button></div>`
+          <div class="toolbar flash-acts"><button class="btn" data-again>😕 Chưa nhớ</button><button class="btn primary" data-good>🙂 Nhớ rồi</button></div>
+          <button type="button" class="linkish flash-known" data-known>✓ Thuộc rồi, không cần ôn nữa</button>`
         : `${exs[0] ? `<div class="wc-ctx">“${blank(exs[0])}”</div>` : ""}
           <div class="hint small">Nhớ nghĩa của từ này không? Thử nói một câu với từ này, rồi bấm Hiện nghĩa.</div>
-          <div class="toolbar flash-acts"><button class="btn primary" data-show>Hiện nghĩa</button></div>`}
+          <div class="toolbar flash-acts"><button class="btn primary" data-show>Hiện nghĩa</button></div>
+          <button type="button" class="linkish flash-known" data-known>✓ Thuộc rồi, không cần ôn nữa</button>`}
     </div>`;
     box.querySelector("[data-say]").onclick = () => sayWord(w.word);
-    box.querySelector("[data-show]")?.addEventListener("click", () => { R.shown = true; renderReview(); });
-    const answer = (ok) => {
-      const now = Date.now();
-      let patch;
-      if (ok && !R.again.has(w.id)) {
-        // New word: today is its learning day. Otherwise the next step of the 1/3/7/14/30-day schedule.
-        const learnedAt = w.stage === 0 ? now : w.learnedAt;
-        const stage = Math.min(w.stage + 1, MASTERED);
-        // A family member already answered today at the same step → the same review day, so they stay together.
-        const mate = siblings(w).find((x) => x.stage === stage && x.due != null && reviewedToday(x));
-        patch = { stage, learnedAt, lastReview: now, due: stage >= MASTERED ? null : mate ? mate.due : pickDay(learnedAt, stage, w.id) };
-      } else if (ok) {
-        // Forgot earlier today, remembered now: today is the new learning day.
-        patch = { stage: 1, learnedAt: now, lastReview: now, due: pickDay(now, 1, w.id) };
-      } else {
-        patch = { stage: 0, learnedAt: null, lastReview: now, due: null };
-        R.again.add(w.id);
-      }
-      update(w.id, patch);
-      R.queue.shift();
-      if (!ok) R.queue.push(w.id); // once more at the end of today's round
+    box.querySelectorAll("[data-fex]").forEach((b) => { b.onclick = () => SE.say(exs[+b.dataset.fex]); });
+    box.querySelector("[data-show]")?.addEventListener("click", () => { R.shown = true; R.shownAt = Date.now(); renderReview(); });
+    // Every step is kept (word schedule + round) so ◀ Trước can undo it.
+    const step = (fn) => {
+      R.history = [...(R.history || []), { id: w.id, queue: [...R.queue], again: [...R.again], done: R.done,
+        before: { stage: w.stage, learnedAt: w.learnedAt ?? null, lastReview: w.lastReview ?? null, due: w.due ?? null } }];
+      fn();
       R.shown = false;
-      R.done += ok ? 1 : 0;
-      SE.track("review");
       renderReview();
       updateNav();
     };
+    const answer = (ok) => {
+      if (Date.now() - (R.shownAt || 0) < 500) return; // a second tap on "Hiện nghĩa", not an answer
+      step(() => {
+        const failedBefore = R.again.has(w.id);
+        update(w.id, advance(w, ok, failedBefore));
+        R.queue.shift();
+        if (!ok) R.again.add(w.id);
+        if (!ok && !failedBefore) R.queue.push(w.id); // once more at the end of today's round, only once
+        R.done += ok ? 1 : 0;
+        SE.track("review");
+      });
+    };
     box.querySelector("[data-again]")?.addEventListener("click", () => answer(false));
     box.querySelector("[data-good]")?.addEventListener("click", () => answer(true));
+    // Tiếp ▶: skip this word in this round, without an answer (it stays due).
+    box.querySelector("[data-next]").onclick = () => step(() => { R.queue.shift(); });
+    // ✓ Thuộc rồi: known for good, no more reviews (shown as "Đã thuộc" in the list).
+    box.querySelector("[data-known]").onclick = () => step(() => {
+      update(w.id, { stage: MASTERED, learnedAt: w.learnedAt || Date.now(), lastReview: Date.now(), due: null });
+      R.queue.shift();
+      R.done += 1;
+    });
+    box.querySelector("[data-back]").onclick = back;
   }
 
   function updateNav() {

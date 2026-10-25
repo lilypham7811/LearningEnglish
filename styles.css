@@ -723,3 +723,9 @@ h2 { font-weight: 800; letter-spacing: -0.02em; }
 .add-ex { margin-top: .35rem; font-size: .85rem; color: var(--leaf); }
 .add-ex-form { display: flex; gap: .4rem; margin-top: .4rem; flex-wrap: wrap; }
 .add-ex-form .input { flex: 1 1 12rem; min-width: 0; }
+
+/* Flashcards: ◀ Trước · Còn n từ · Tiếp ▶, and "Thuộc rồi" */
+.flash-nav { display: flex; align-items: center; justify-content: space-between; gap: .5rem; }
+.flash-nav .btn[disabled] { opacity: .35; }
+.flash-known { display: block; margin: .6rem auto 0; font-size: .85rem; color: var(--ink-3); }
+.flash .wc-exs .ex-say { margin-right: .2rem; }
