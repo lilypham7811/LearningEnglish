@@ -726,7 +726,7 @@
         <h3 class="d-title">${esc(item.title)}</h3><div class="card-meta">Lưu ngày ${dateVi(item.savedAt)}${item.text ? ` · ${words(item.text)} từ · ~${Math.max(1, Math.round(words(item.text) / 200))} phút đọc` : ""}</div>
         <div class="toolbar d-acts"><a class="btn" href="${esc(item.url)}" target="_blank" rel="noopener" data-open-link>↗ Mở bài gốc</a><button class="btn ghost danger" data-del>🗑 Xóa</button></div>
         ${item.text
-          ? `<p class="hint small">💡 Bấm vào một câu để nghe đọc.</p><div class="reader-text">${paragraphs(item.text)}</div>`
+          ? `<p class="hint small">💡 Chạm vào một từ để lưu, nghe từ hoặc nghe cả câu.</p><div class="reader-text">${paragraphs(item.text)}</div>`
           : `<div class="status warn">Chưa có nội dung bài. Bấm một gợi ý ✨ bên Google AI để AI tự đọc bài từ link, hoặc dán nội dung vào đây:</div>
              <textarea class="input" rows="6" data-paste placeholder="Dán nội dung bài báo…"></textarea><div class="toolbar"><button class="btn primary" data-save-text>Lưu nội dung</button></div>`}
       </div></div>`;
@@ -918,10 +918,11 @@
       const tb = e.target.closest(".cue-t");
       if (tb) { try { yt.player?.seekTo(+tb.dataset.t, true); yt.player?.playVideo(); } catch {} }
     });
-    // Click a sentence to hear it.
+    // Tap a word: save it (or hear it / its sentence). Tap between words: hear the sentence.
     box.querySelector(".detail-main").addEventListener("click", (e) => {
       const s = e.target.closest(".sent");
       if (!s || getSelection().toString().trim()) return; // selecting a word to save it, not listening
+      if (window.SE_WORDS?.tapWord(e, s)) return; // a word: ⭐ Lưu từ · 🔊 · ▶ Câu
       box.querySelectorAll(".sent.on").forEach((x) => x.classList.remove("on"));
       s.classList.add("on");
       SE.track("read");

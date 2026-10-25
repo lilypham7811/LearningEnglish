@@ -217,6 +217,8 @@
       }
     }
     if (!patch) return;
+    // No Vietnamese meaning (Google's dictionary didn't answer, e.g. busy for this phone): ask MyMemory.
+    if (!patch.meaningVi) patch.meaningVi = await myMemoryVi(it.word).catch(() => "");
     // Save the dictionary form: "discussions" -> "discussion". The form actually seen stays in `form`
     // (to highlight it in the sentence). If the base word is already in the list, keep that one.
     const lemma = (patch.lemma || "").trim();
@@ -312,6 +314,15 @@
     };
   }
 
+  // MyMemory: free translation (no key), used when Google's dictionary gives no Vietnamese meaning.
+  async function myMemoryVi(word) {
+    const r = await fetch(`https://api.mymemory.translated.net/get?langpair=en|vi&q=${encodeURIComponent(word)}`);
+    if (!r.ok) return "";
+    const j = await r.json();
+    const t = (j.responseData?.translatedText || "").normalize("NFC").trim();
+    return t && t.toLowerCase() !== word.toLowerCase() && !/MYMEMORY|QUOTA/i.test(t) ? t : "";
+  }
+
   // Two free English dictionaries (no key); the second is a fallback when the first is down.
   async function freeDictionary(word) {
     const good = (x) => x && x.split(" ").length >= 4 && !/synonym|antonym/i.test(x);
@@ -354,7 +365,8 @@
     pop.className = "word-pop";
     pop.innerHTML = `<b>${esc(word)}</b>
       <button type="button" class="btn small primary" data-w="save">⭐ Lưu từ</button>
-      <button type="button" class="btn small" data-w="say" aria-label="Nghe">🔊</button>
+      <button type="button" class="btn small" data-w="say" aria-label="Nghe từ">🔊</button>
+      ${info.sentence ? `<button type="button" class="btn small" data-w="sent" aria-label="Nghe cả câu">▶ Câu</button>` : ""}
       <a class="btn small" target="_blank" rel="noopener" href="https://translate.google.com/?sl=en&tl=vi&op=translate&text=${encodeURIComponent(word)}">🌐 Dịch</a>`;
     document.body.appendChild(pop);
     place(pop, el.getBoundingClientRect());
@@ -362,7 +374,8 @@
       const b = e.target.closest("[data-w]");
       if (!b) return;
       if (b.dataset.w === "say") sayWord(word);
-      else { save({ ...info, word }); closePop(); }
+      else if (b.dataset.w === "sent") { SE.say(info.sentence); closePop(); }
+      else { const { sentence, ...raw } = info; save({ ...raw, word }); closePop(); }
     };
   }
   function place(node, r) {
@@ -397,6 +410,37 @@
       selBtn.onclick = () => { save({ word: text, ...contextFor(node) }); hideSel(); getSelection().removeAllRanges(); };
     }, 300);
   });
+  // ---------- Tap a word in an article or speech → "⭐ Lưu từ" ----------
+  // Selecting text is fiddly on a phone (and iPhone's own Copy/Look Up menu covers the save button), so a tap
+  // on a word is enough, as in the video subtitles. Returns false when the tap was not on a word (the reader
+  // then plays the sentence, as before).
+  const WORD_CH = /[A-Za-z'’-]/;
+  function tapWord(e, sentEl) {
+    let node = null, at = 0;
+    if (document.caretRangeFromPoint) {
+      const r = document.caretRangeFromPoint(e.clientX, e.clientY);
+      if (r) { node = r.startContainer; at = r.startOffset; }
+    } else if (document.caretPositionFromPoint) {
+      const p = document.caretPositionFromPoint(e.clientX, e.clientY);
+      if (p) { node = p.offsetNode; at = p.offset; }
+    }
+    if (!node || node.nodeType !== 3 || !sentEl.contains(node)) return false;
+    const t = node.textContent;
+    let a = at, b = at;
+    if (!WORD_CH.test(t[a] || "") && WORD_CH.test(t[a - 1] || "")) a = b = at - 1; // tapped just after the word
+    if (!WORD_CH.test(t[a] || "")) return false;
+    while (a > 0 && WORD_CH.test(t[a - 1])) a--;
+    while (b < t.length && WORD_CH.test(t[b])) b++;
+    const word = clean(t.slice(a, b));
+    if (!word || !/[a-z]/i.test(word)) return false;
+    const range = document.createRange();
+    range.setStart(node, a);
+    range.setEnd(node, b);
+    const rect = range.getBoundingClientRect();
+    popover({ getBoundingClientRect: () => rect }, { word, ...contextFor(node.parentElement), sentence: sentEl.textContent });
+    return true;
+  }
+
   // The sentence and the source (video, article, speech, dialog) around a selected word.
   function contextFor(node) {
     const sentence = node.closest(".sent, .cue-x, .sub-line, .text, .pc-ex, li, p")?.textContent || "";
@@ -800,6 +844,6 @@
   });
   document.addEventListener("se:synced", () => { updateNav(); if (!$("view-words").hidden && !ui.review) render(); });
 
-  window.SE_WORDS = { save, popover, sayWord, fromText };
+  window.SE_WORDS = { save, popover, sayWord, fromText, tapWord };
   updateNav();
 })();
