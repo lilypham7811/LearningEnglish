@@ -62,19 +62,72 @@
 
   // ---------- Speech ----------
   // Speak one text; resolves when finished. onWord(charIndex) for highlighting.
-  // Natural AI voice (voice.js) when it is turned on and ready; otherwise the device's voice.
+  // Natural AI voice (voice.js) when it is turned on and ready; on iPhone/iPad Google's voice as audio
+  // (the device voice is often silent there); otherwise the device's voice.
   function speak(text, voice, rate, onWord) {
+    const which = voice && voice === state.voiceB && state.voiceB !== state.voiceA ? "B" : "A";
     if (window.SE_VOICE?.enabled()) {
-      const which = voice && voice === state.voiceB && state.voiceB !== state.voiceA ? "B" : "A";
       return window.SE_VOICE.speak(text, which, rate).then((ok) => (ok ? undefined : speakDevice(text, voice, rate, onWord)));
     }
+    if (isIOS) return speakCloud(text, which, rate, onWord).then((ok) => (ok ? undefined : speakDevice(text, voice, rate, onWord)));
     return speakDevice(text, voice, rate, onWord);
   }
+
+  // Google Translate's voice as audio files, played like the Oxford recordings (iPhone plays these even on silent).
+  // Google refuses requests that carry the page's address, so the audio plays inside a hidden frame that sends
+  // none. One audio element is reused: iPhone lets an element play again once a tap has started it.
+  const isIOS = /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  let quiet = null, cloudAudio = null, cloudGen = 0, cloudDone = null; // cloudDone: ends the part now playing
+  function makeQuietFrame() {
+    quiet = document.createElement("iframe");
+    quiet.hidden = true;
+    quiet.setAttribute("aria-hidden", "true");
+    quiet.onload = () => { quiet.dataset.ready = "1"; };
+    quiet.srcdoc = '<meta name="referrer" content="no-referrer">';
+    document.body.append(quiet);
+  }
+  // Google reads about 200 characters at a time: split at sentence ends, then at commas or spaces.
+  function chunks(text) {
+    const out = [];
+    let rest = text.replace(/\s+/g, " ").trim(), at0 = 0;
+    while (rest) {
+      let at = rest.length;
+      if (rest.length > 180) {
+        const end = Math.max(rest.lastIndexOf(". ", 180), rest.lastIndexOf("? ", 180), rest.lastIndexOf("! ", 180));
+        at = end > 40 ? end + 1 : Math.max(rest.lastIndexOf(", ", 180) + 1, rest.lastIndexOf(" ", 180), 1);
+      }
+      out.push({ t: rest.slice(0, at).trim(), from: at0 });
+      at0 += at;
+      rest = rest.slice(at).trimStart();
+    }
+    return out;
+  }
+  async function speakCloud(text, which, rate, onWord) {
+    const win = quiet?.dataset.ready && quiet.contentWindow;
+    if (!win || !text.trim()) return false;
+    const a = (cloudAudio ||= new win.Audio());
+    const gen = ++cloudGen;
+    for (const c of chunks(text)) {
+      const ok = await new Promise((resolve) => {
+        cloudDone?.(true);
+        cloudDone = resolve;
+        a.src = `https://translate.googleapis.com/translate_tts?client=gtx&ie=UTF-8&tl=${which === "B" ? "en-GB" : "en-US"}&q=${encodeURIComponent(c.t)}`;
+        a.playbackRate = Math.min(Math.max(rate || 1, 0.5), 2);
+        a.ontimeupdate = () => { if (onWord && a.duration) onWord(c.from + Math.floor((c.t.length * a.currentTime) / a.duration)); };
+        a.onended = () => resolve(true);
+        a.onerror = () => resolve(false);
+        a.play().catch(() => resolve(false));
+      });
+      if (gen !== cloudGen) return true; // stopped, or another text started
+      if (!ok) return false;
+    }
+    return true;
+  }
+  if (isIOS) makeQuietFrame();
   // iPhone/iPad Safari: (1) the device voice is muted by the side silent switch unless the page asks for
   // "playback" sound (Safari 17+; set back to "auto" before listening to the microphone); (2) a sentence started
   // right after another was stopped is often dropped, so wait a moment then; (3) if it still doesn't start,
   // say what to check instead of staying silent.
-  const isIOS = /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
   const audioSession = (type) => { try { if (navigator.audioSession) navigator.audioSession.type = type; } catch { /* older Safari */ } };
   // Any microphone use (recording, Gemini Live, scoring) switches back to normal sound mode first.
   if (isIOS && navigator.mediaDevices?.getUserMedia) {
@@ -109,6 +162,9 @@
   }
   function stopAll() {
     state.playToken++;
+    cloudGen++;
+    cloudAudio?.pause();
+    cloudDone?.(true);
     cancelSpeech();
     window.SE_VOICE?.stop();
     document.querySelectorAll(".line.active").forEach((el) => el.classList.remove("active"));
