@@ -665,10 +665,12 @@ Name2: English sentence | Vietnamese translation`;
   // Level (Cơ bản → Trung cấp → Nâng cao, or ⭐ Của tôi) → main topic, in a fixed order → numbered lessons,
   // easiest first, each with a "Đã học" tick (synced: list "done", ids "done:<dialog id>").
   // Searching looks through every level.
+  // Colours follow the rainbow in topic order (red → violet); the list shows them as soft tints.
   const TOPICS = [
-    ["Giao tiếp hằng ngày", "👋", "var(--leaf)"], ["Ăn uống", "🍽️", "var(--r1)"], ["Mua sắm", "🛍️", "var(--r2)"],
-    ["Du lịch & đi lại", "✈️", "var(--r5)"], ["Sức khỏe & thể thao", "🩺", "var(--r4)"], ["Nhà ở & dịch vụ", "🏠", "var(--turmeric)"],
-    ["Công việc & học tập", "💼", "var(--r6)"], ["Giải trí & sở thích", "🎉", "var(--r7)"], ["Chủ đề khác", "💬", "var(--ink-3)"],
+    ["Giao tiếp hằng ngày", "👋", "var(--r1)"], ["Ăn uống", "🍽️", "var(--r2)"], ["Mua sắm", "🛍️", "var(--r3)"],
+    ["Du lịch & đi lại", "✈️", "var(--r4)"], ["Sức khỏe & thể thao", "🩺", "color-mix(in srgb, var(--r4) 45%, var(--r5))"],
+    ["Nhà ở & dịch vụ", "🏠", "var(--r5)"], ["Công việc & học tập", "💼", "var(--r6)"], ["Giải trí & sở thích", "🎉", "var(--r7)"],
+    ["Chủ đề khác", "💬", "var(--ink-3)"],
   ];
   const CAT_ALIAS = { "Sức khỏe": "Sức khỏe & thể thao", "Dịch vụ": "Nhà ở & dịch vụ" }; // older names, in saved dialogs
   const catColor = (c) => (TOPICS.find((t) => t[0] === c) || TOPICS[TOPICS.length - 1])[2];

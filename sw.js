@@ -1,9 +1,9 @@
 // Service worker: lets the installed app open offline (library dialogs, saved items, practice log).
 // App files: network first, so updates show up right away; the cached copy is used only when offline.
 // Google Fonts: cache first. Google AI and YouTube requests are never cached.
-const CACHE = "shadow-english-v41";
+const CACHE = "shadow-english-v42";
 const SHELL = [
-  "./", "./index.html", "./styles.css?v=42", "./dialogs.js?v=42", "./app.js?v=42", "./live.js?v=42", "./library.js?v=42", "./words.js?v=42", "./handoff.js?v=42", "./voice.js?v=42", "./sync.js?v=42", "./cloudvoice.js?v=42",
+  "./", "./index.html", "./styles.css?v=43", "./dialogs.js?v=43", "./app.js?v=43", "./live.js?v=43", "./library.js?v=43", "./words.js?v=43", "./handoff.js?v=43", "./voice.js?v=43", "./sync.js?v=43", "./cloudvoice.js?v=43",
   "./manifest.webmanifest", "./icons/icon-192.png", "./icons/icon-512.png", "./icons/apple-touch-icon.png",
 ];
 
