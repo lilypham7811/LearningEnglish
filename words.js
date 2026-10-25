@@ -2,7 +2,7 @@
 // word | part of speech + IPA | listen + say it | Oxford meaning | Vietnamese meaning | 3 common examples.
 // Words come from: clicking a word in the video subtitles, the box under a video, selecting text anywhere
 // in the app, or right-click "Save word to LearningEnglish" in the browser extension.
-// Review schedule (days after the word was learned): 1, 3, 7, 14 and 30, at most 10 words a day.
+// Review schedule (days after each review): 2, 4, 7, 14 and 30, at most 10 words a day.
 // After the last one it is "đã thuộc". "Chưa nhớ" starts the schedule again from today.
 // Word families (metabolism, metabolic, metabolize) sit together in the table and are learned on the same day.
 // "Nghe" plays Oxford Learner's Dictionaries' own recording of the word.
@@ -14,10 +14,11 @@
   const $ = (id) => document.getElementById(id);
   const esc = SE.esc;
   const DAY = 86400000;
-  // Stage 0 = new (saved, not learned yet). Learning it = its first review; then reviews 1..5 come
-  // 1, 3, 7, 14 and 30 days after that learning day. After review 5 the word is learned (MASTERED).
-  const OFFSETS = [1, 3, 7, 14, 30];
-  const FUZZ = [0, 1, 2, 3, 3];        // days a review may move (earlier/later) to keep days under the limit
+  // Stage 0 = new (saved, not learned yet). Learning it = its first review; then each review comes
+  // 2, 4, 7, 14 and 30 days after the one before. After review 5 the word is learned (MASTERED).
+  // A word studied today never comes back tomorrow (that day goes to other words), whatever the answer.
+  const OFFSETS = [2, 4, 7, 14, 30];
+  const FUZZ = [1, 1, 2, 3, 3];        // days a review may move to keep days under the limit (the first only later)
   const MASTERED = OFFSETS.length + 1;
   const DAILY = 10;                    // at most 10 words a day: reviews that are due first, then new words
   const NEW_MIN = 3;                   // …but always room for 3 new words, so every saved word gets its turn
@@ -136,9 +137,9 @@
     }
     return out;
   }
-  // One answer → the word's next step. Remembered: the next step of the 1/3/7/14/30-day schedule (a new word
-  // starts today). Forgotten (or remembered only after forgetting today): back to the first step, so again
-  // tomorrow. A word that was studied is never "new" again.
+  // One answer → the word's next step. Remembered: the next step of the 2/4/7/14/30-day schedule (a new word
+  // starts today). Forgotten (or remembered only after forgetting today): back to the first step, so again in
+  // 2 days. A word that was studied is never "new" again.
   function advance(w, ok, failedToday = false) {
     const now = Date.now();
     if (ok && !failedToday) {
@@ -146,26 +147,27 @@
       const stage = Math.min(w.stage + 1, MASTERED);
       // A family member already answered today at the same step → the same review day, so they stay together.
       const mate = siblings(w).find((x) => x.stage === stage && x.due != null && reviewedToday(x));
-      return { stage, learnedAt, lastReview: now, due: stage >= MASTERED ? null : mate ? mate.due : pickDay(learnedAt, stage, w.id) };
+      return { stage, learnedAt, lastReview: now, due: stage >= MASTERED ? null : mate ? mate.due : pickDay(stage, w.id) };
     }
-    return { stage: 1, learnedAt: now, lastReview: now, due: pickDay(now, 1, w.id) };
+    return { stage: 1, learnedAt: now, lastReview: now, due: pickDay(1, w.id) };
   }
   const due = () => todayQueue();
-  // Pick the review day: the planned day (learning day + 1/3/7/14/30), moved up to FUZZ days earlier or
-  // later to the day with the fewest words; if all those days are full, look a few days later.
-  function pickDay(learnedAt, stage, id) {
+  // Pick the review day: today + 2/4/7/14/30 days for this step, moved up to FUZZ days earlier or later
+  // only when that day is nearly full; if all those days are full, look a few days later.
+  function pickDay(stage, id) {
     const all = list();
-    const tomorrow = today() + DAY;
-    const target = Math.max(startOfDay(learnedAt) + OFFSETS[stage - 1] * DAY, tomorrow);
+    const earliest = today() + OFFSETS[0] * DAY; // never tomorrow: a word studied today makes room for others
+    const target = Math.max(today() + OFFSETS[stage - 1] * DAY, earliest);
     const loadOn = (day) => all.filter((x) => x.id !== id && x.stage >= 1 && x.stage < MASTERED && x.due != null && startOfDay(x.due) === day).length;
     const f = FUZZ[stage - 1];
     let best = null;
     for (let extra = 0; extra <= 3 && (!best || best.load >= DAILY); extra++) {
       for (let k = -f; k <= f + extra; k++) {
         const day = target + k * DAY;
-        if (day < tomorrow) continue;
+        if (day < earliest) continue;
         const load = loadOn(day);
-        const score = load * 10 + Math.abs(k); // fewest words first, then closest to the planned day
+        // The planned day, unless it is nearly full (7+ words): then the emptiest day nearby.
+        const score = Math.max(0, load - (DAILY - 4)) * 10 + Math.abs(k);
         if (!best || score < best.score) best = { day, load, score };
       }
     }
@@ -174,8 +176,12 @@
   const oxfordUrl = (w) => `https://www.oxfordlearnersdictionaries.com/search/english/?q=${encodeURIComponent(w.toLowerCase())}`;
   // Words saved before the new schedule (box/due, one example) get the new fields.
   function upgrade(w) {
-    // Studied before but sent back to "new" by the old "Chưa nhớ": first step, due the day after that review.
-    if (w.stage === 0 && w.lastReview) return { ...w, stage: 1, learnedAt: w.lastReview, due: startOfDay(w.lastReview) + DAY };
+    // Studied before but sent back to "new" by the old "Chưa nhớ": first step, 2 days after that review.
+    if (w.stage === 0 && w.lastReview) return { ...w, stage: 1, learnedAt: w.lastReview, due: startOfDay(w.lastReview) + OFFSETS[0] * DAY };
+    // First step planned for the next day (old 1-day schedule): 2 days after learning instead.
+    if (w.stage === 1 && w.learnedAt && w.due != null && startOfDay(w.due) < startOfDay(w.learnedAt) + OFFSETS[0] * DAY) {
+      return { ...w, due: startOfDay(w.learnedAt) + OFFSETS[0] * DAY };
+    }
     if (w.stage != null) return w;
     const learnedAt = w.learnedAt || w.savedAt || Date.now();
     const stage = Math.min(w.box || 0, MASTERED);
@@ -478,7 +484,7 @@
 
 
   // ---------- Section ----------
-  const STAGE_NAMES = ["Từ mới", "Ôn sau 1 ngày", "Ôn sau 3 ngày", "Ôn sau 1 tuần", "Ôn sau 2 tuần", "Ôn sau 1 tháng"];
+  const STAGE_NAMES = ["Từ mới", "Ôn sau 2 ngày", "Ôn sau 4 ngày", "Ôn sau 1 tuần", "Ôn sau 2 tuần", "Ôn sau 1 tháng"];
   const dayLabel = (t) => new Date(t).toLocaleDateString("vi-VN", { weekday: "short", day: "2-digit", month: "2-digit" });
   function render() {
     const root = $("view-words");
@@ -840,7 +846,7 @@
     return `Tiếp theo: ${day === tomorrow ? "ngày mai" : dayLabel(day)} · ${n} từ ôn lại${more}`;
   }
   // What "Nhớ rồi" does to this word, in words: "ôn lại sau 3 ngày", "… 1 tuần", "đã thuộc".
-  const GAP_NAMES = { 1: "1 ngày", 3: "3 ngày", 7: "1 tuần", 14: "2 tuần", 30: "1 tháng" };
+  const GAP_NAMES = { 2: "2 ngày", 4: "4 ngày", 7: "1 tuần", 14: "2 tuần", 30: "1 tháng" };
   function nextGap(w, failedToday) {
     const stage = failedToday ? 1 : Math.min(w.stage + 1, MASTERED);
     return stage >= MASTERED ? "xong, đã thuộc" : `ôn lại sau ${GAP_NAMES[OFFSETS[stage - 1]]}`;
@@ -856,7 +862,7 @@
         <div class="rv-text"><b>${d.length ? `Hôm nay ôn ${d.length} từ` : list().some(reviewedToday) ? `Hôm nay đã ôn xong (${list().filter(reviewedToday).length} từ)` : list().length ? "Hôm nay không có từ cần ôn" : "Chưa có từ để ôn"}</b>
           ${d.length ? `<span class="muted small">(${d.filter((w) => w.stage >= 1).length} ôn lại · ${d.filter((w) => w.stage === 0).length} từ mới)</span>` : ""}
           <span class="muted small">${nextReview()}</span>
-          <span class="rv-info" tabindex="0" title="Mỗi ngày tối đa 10 từ: từ đến hạn ôn trước, rồi đến từ mới. Mỗi từ được ôn lại sau 1 ngày, 3 ngày, 1 tuần, 2 tuần và 1 tháng kể từ ngày học (có thể xê dịch 1–3 ngày để không ngày nào quá 10 từ). Ôn đủ 5 lần là đã thuộc. Bấm “Chưa nhớ” thì ngày mai ôn lại từ đó. Mỗi ngày luôn có ít nhất 3 từ mới. Nghe từ và một câu ví dụ, hoặc Nói thử đạt 70%, trong bảng bên dưới cũng được tính là đã ôn." aria-label="Lịch ôn: tối đa 10 từ mỗi ngày; ôn lại sau 1, 3, 7, 14 và 30 ngày">ⓘ</span></div>
+          <span class="rv-info" tabindex="0" title="Mỗi ngày tối đa 10 từ: từ đến hạn ôn trước, rồi đến từ mới. Mỗi từ được ôn lại sau 2 ngày, 4 ngày, 1 tuần, 2 tuần và 1 tháng kể từ lần ôn trước (có thể xê dịch 1–3 ngày khi ngày đó đã gần đủ 10 từ). Ôn đủ 5 lần là đã thuộc. Từ đã học hôm nay không bao giờ quay lại vào ngày mai; bấm “Chưa nhớ” thì 2 ngày sau ôn lại từ đầu. Mỗi ngày luôn có ít nhất 3 từ mới. Nghe từ và một câu ví dụ, hoặc Nói thử đạt 70%, trong bảng bên dưới cũng được tính là đã ôn." aria-label="Lịch ôn: tối đa 10 từ mỗi ngày; ôn lại sau 2, 4, 7, 14 và 30 ngày">ⓘ</span></div>
         <div class="toolbar">${d.length ? `<button class="btn primary" data-start>Bắt đầu ôn</button>` : todayQueue(list(), 5).length ? `<button class="btn" data-more>＋ Học thêm 5 từ</button>` : ""}
           ${list().length ? `<button class="btn" data-voice>🎙️ Ôn bằng giọng nói</button>` : ""}</div>
       </div>`;
@@ -908,7 +914,7 @@
           ${w.meaningVi ? `<div class="wc-mean">${esc(w.meaningVi)}</div>` : ""}${w.defEn ? `<div class="wc-def">${esc(w.defEn)}</div>` : ""}
           ${exs.length ? `<ol class="wc-exs">${exs.map((s, i) => `<li><button type="button" class="ex-say" data-fex="${i}" aria-label="Nghe câu">🔊</button> ${mark(w, s)}</li>`).join("")}</ol>` : ""}
           ${siblings(w).length ? `<div class="flash-fam">🧩 Cùng họ: ${siblings(w).map((x) => `<b>${esc(x.word)}</b>${x.pos ? ` <i>${esc(x.pos)}</i>` : ""}${x.meaningVi ? ` – ${esc(x.meaningVi.split(/[;,]/)[0])}` : ""}`).join(" · ")}</div>` : ""}
-          <div class="toolbar flash-acts"><button class="btn answer" data-again>😕 Chưa nhớ<small>ôn lại ngày mai</small></button>
+          <div class="toolbar flash-acts"><button class="btn answer" data-again>😕 Chưa nhớ<small>ôn lại sau 2 ngày</small></button>
             <button class="btn primary answer" data-good>🙂 Nhớ rồi<small>${nextGap(w, R.again.has(w.id))}</small></button></div>
           <button type="button" class="linkish flash-known" data-known>✓ Thuộc rồi, không cần ôn nữa</button>
     </div>`;
