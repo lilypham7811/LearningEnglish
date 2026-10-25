@@ -877,7 +877,7 @@
     }
     const R = ui.review;
     const w = list().find((x) => x.id === R.queue[0]);
-    // ◀ Trước undoes the last step (answer, skip or "Thuộc rồi"): the word's schedule and the round as they were.
+    // ◀ Back undoes the last step (answer, skip or "Thuộc rồi"): the word's schedule and the round as they were.
     const back = () => {
       const h = R.history?.pop();
       if (!h) return;
@@ -885,7 +885,6 @@
       R.queue = h.queue;
       R.again = new Set(h.again);
       R.done = h.done;
-      R.shown = false;
       renderReview();
       updateNav();
     };
@@ -897,39 +896,34 @@
       return;
     }
     const exs = [...[...(w.context ? [w.context] : []), ...(w.examples || [])].slice(0, 3), ...(w.myExamples || [])];
-    const esc_re = (x) => x.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    const blank = (txt) => [w.word, w.form].filter(Boolean).reduce((acc, f) => acc.replace(new RegExp(esc_re(f), "ig"), "_____"), esc(txt));
+    // The card shows everything at once (word, meaning, examples). A new card ignores taps for a moment, so a
+    // quick second tap on the previous card's answer doesn't answer this one too.
+    if (R.cardId !== w.id) { R.cardId = w.id; R.shownAt = Date.now(); }
     box.innerHTML = `<div class="panel-body flash">
       <div class="flash-nav"><button type="button" class="btn nav-btn" data-back ${R.history?.length ? "" : "disabled"} title="Quay lại từ trước (huỷ câu trả lời của từ đó)">◀ Back</button>
         <span class="muted small">Còn ${R.queue.length} từ · ${STAGE_NAMES[Math.min(w.stage, STAGE_NAMES.length - 1)]}</span>
         <button type="button" class="btn nav-btn" data-next title="Bỏ qua từ này lần này, không chấm (vẫn ôn vào lần sau)">Next ▶</button></div>
       <div class="flash-word">${esc(w.word)} <button type="button" class="btn small" data-say>🔊</button></div>
-      ${R.shown ? `<div class="muted">${esc([w.pos, w.ipa].filter(Boolean).join(" · "))}</div>
+      <div class="muted">${esc([w.pos, w.ipa].filter(Boolean).join(" · "))}</div>
           ${w.meaningVi ? `<div class="wc-mean">${esc(w.meaningVi)}</div>` : ""}${w.defEn ? `<div class="wc-def">${esc(w.defEn)}</div>` : ""}
           ${exs.length ? `<ol class="wc-exs">${exs.map((s, i) => `<li><button type="button" class="ex-say" data-fex="${i}" aria-label="Nghe câu">🔊</button> ${mark(w, s)}</li>`).join("")}</ol>` : ""}
           ${siblings(w).length ? `<div class="flash-fam">🧩 Cùng họ: ${siblings(w).map((x) => `<b>${esc(x.word)}</b>${x.pos ? ` <i>${esc(x.pos)}</i>` : ""}${x.meaningVi ? ` – ${esc(x.meaningVi.split(/[;,]/)[0])}` : ""}`).join(" · ")}</div>` : ""}
           <div class="toolbar flash-acts"><button class="btn answer" data-again>😕 Chưa nhớ<small>ôn lại ngày mai</small></button>
             <button class="btn primary answer" data-good>🙂 Nhớ rồi<small>${nextGap(w, R.again.has(w.id))}</small></button></div>
-          <button type="button" class="linkish flash-known" data-known>✓ Thuộc rồi, không cần ôn nữa</button>`
-        : `${exs[0] ? `<div class="wc-ctx">“${blank(exs[0])}”</div>` : ""}
-          <div class="hint small">Nhớ nghĩa của từ này không? Thử nói một câu với từ này, rồi bấm Hiện nghĩa.</div>
-          <div class="toolbar flash-acts"><button class="btn primary" data-show>Hiện nghĩa</button></div>
-          <button type="button" class="linkish flash-known" data-known>✓ Thuộc rồi, không cần ôn nữa</button>`}
+          <button type="button" class="linkish flash-known" data-known>✓ Thuộc rồi, không cần ôn nữa</button>
     </div>`;
     box.querySelector("[data-say]").onclick = () => sayWord(w.word);
     box.querySelectorAll("[data-fex]").forEach((b) => { b.onclick = () => SE.say(exs[+b.dataset.fex]); });
-    box.querySelector("[data-show]")?.addEventListener("click", () => { R.shown = true; R.shownAt = Date.now(); renderReview(); });
     // Every step is kept (word schedule + round) so ◀ Trước can undo it.
     const step = (fn) => {
       R.history = [...(R.history || []), { id: w.id, queue: [...R.queue], again: [...R.again], done: R.done,
         before: { stage: w.stage, learnedAt: w.learnedAt ?? null, lastReview: w.lastReview ?? null, due: w.due ?? null } }];
       fn();
-      R.shown = false;
       renderReview();
       updateNav();
     };
     const answer = (ok) => {
-      if (Date.now() - (R.shownAt || 0) < 500) return; // a second tap on "Hiện nghĩa", not an answer
+      if (Date.now() - (R.shownAt || 0) < 400) return; // a second tap meant for the previous card
       step(() => {
         const failedBefore = R.again.has(w.id);
         update(w.id, advance(w, ok, failedBefore));
