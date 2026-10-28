@@ -503,7 +503,8 @@
     root.innerHTML = `<div class="vhead"><div><p class="eyebrow">Phần 2 · Từ vựng</p><h2>Từ vựng</h2></div>
         <dl class="stat-list" aria-label="Thống kê từ vựng">
           <div style="--pc:var(--r5)"><dt>Tổng số từ</dt><dd>${all.length}</dd></div>
-          <div style="--pc:var(--r1)"><dt>Ôn hôm nay</dt><dd>${due().length}</dd></div>
+          <div style="--pc:var(--r1)"><dt>Còn ôn hôm nay</dt><dd>${due().length}</dd></div>
+          <div style="--pc:var(--r4)"><dt>Đã ôn hôm nay</dt><dd>${all.filter(reviewedToday).length}</dd></div>
           <div style="--pc:var(--turmeric)"><dt>Từ mới chờ học</dt><dd>${all.filter((w) => w.stage === 0).length}</dd></div>
           <div style="--pc:var(--r4)"><dt>Đã thuộc</dt><dd>${mastered}</dd></div>
         </dl></div>
