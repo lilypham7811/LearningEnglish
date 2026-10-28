@@ -3,7 +3,8 @@
 // Words come from: clicking a word in the video subtitles, the box under a video, selecting text anywhere
 // in the app, or right-click "Save word to LearningEnglish" in the browser extension.
 // Review schedule (days after each review): 2, 4, 7, 14 and 30, at most 10 words a day.
-// After the last one it is "đã thuộc". "Chưa nhớ" starts the schedule again from today.
+// After the last one it is "đã thuộc". On a flashcard the answer is the word's list: 🗣 Speaking (6 times)
+// or 📖 Reading (3 times); either one moves the word on to its next step.
 // Word families (metabolism, metabolic, metabolize) sit together in the table and are learned on the same day.
 // "Nghe" plays Oxford Learner's Dictionaries' own recording of the word.
 // On the phone: 📋 Dán (a word or sentence copied in any app), the iPhone Share menu shortcut (#share=)
@@ -888,7 +889,7 @@
         <div class="rv-text"><b>${d.length ? `Hôm nay ôn ${d.length} từ` : list().some(reviewedToday) ? `Hôm nay đã ôn xong (${list().filter(reviewedToday).length} từ)` : list().length ? "Hôm nay không có từ cần ôn" : "Chưa có từ để ôn"}</b>
           ${d.length ? `<span class="muted small">(${d.filter((w) => w.stage >= 1).length} ôn lại · ${d.filter((w) => w.stage === 0).length} từ mới)</span>` : ""}
           <span class="muted small">${nextReview()}</span>
-          <span class="rv-info" tabindex="0" title="Mỗi ngày tối đa 10 từ: từ đến hạn ôn trước, rồi đến từ mới. Mỗi từ được ôn lại sau 2 ngày, 4 ngày, 1 tuần, 2 tuần và 1 tháng kể từ lần ôn trước (có thể xê dịch 1–3 ngày khi ngày đó đã gần đủ 10 từ). Ôn đủ 5 lần là đã thuộc. Từ đã học hôm nay không bao giờ quay lại vào ngày mai; bấm “Chưa nhớ” thì 2 ngày sau ôn lại từ đầu. Mỗi ngày luôn có ít nhất 3 từ mới. Nghe từ và một câu ví dụ, hoặc Nói thử đạt 70%, trong bảng bên dưới cũng được tính là đã ôn." aria-label="Lịch ôn: tối đa 10 từ mỗi ngày; ôn lại sau 2, 4, 7, 14 và 30 ngày">ⓘ</span></div>
+          <span class="rv-info" tabindex="0" title="Mỗi ngày tối đa 10 từ: từ đến hạn ôn trước, rồi đến từ mới. Mỗi từ được ôn lại sau 2 ngày, 4 ngày, 1 tuần, 2 tuần và 1 tháng kể từ lần ôn trước (có thể xê dịch 1–3 ngày khi ngày đó đã gần đủ 10 từ). Ôn đủ 5 lần là đã thuộc. Từ đã học hôm nay không bao giờ quay lại vào ngày mai. Trên thẻ ôn, bấm 🗣 Speaking (từ để nói, ôn 6 lần) hoặc 📖 Reading (từ để đọc, ôn 3 lần, lịch 4 ngày rồi 2 tuần). Mỗi ngày luôn có ít nhất 3 từ mới. Nghe từ và một câu ví dụ, hoặc Nói thử đạt 70%, trong bảng bên dưới cũng được tính là đã ôn." aria-label="Lịch ôn: tối đa 10 từ mỗi ngày; ôn lại sau 2, 4, 7, 14 và 30 ngày">ⓘ</span></div>
         <div class="toolbar">${d.length ? `<button class="btn primary" data-start>Bắt đầu ôn</button>` : todayQueue(list(), 5).length ? `<button class="btn" data-more>＋ Học thêm 5 từ</button>` : ""}
           ${list().length ? `<button class="btn" data-voice>🎙️ Ôn bằng giọng nói</button>` : ""}</div>
       </div>`;
@@ -936,15 +937,13 @@
         <span class="muted small">Còn ${R.queue.length} từ · lần ${Math.min(w.stage + 1, doneAt(w))}/${doneAt(w)}</span>
         <button type="button" class="btn nav-btn" data-next title="Bỏ qua từ này lần này, không chấm (vẫn ôn vào lần sau)">Next ▶</button></div>
       <div class="flash-word">${esc(w.word)} <button type="button" class="btn small" data-say>🔊</button></div>
-      <div class="use-pick" role="group" aria-label="Từ này để">
-        <button type="button" data-use="speaking" aria-pressed="${!isReading(w)}">🗣 Speaking <small>ôn 6 lần</small></button>
-        <button type="button" data-use="reading" aria-pressed="${isReading(w)}">📖 Reading <small>ôn 3 lần</small></button></div>
       <div class="muted">${esc([w.pos, w.ipa].filter(Boolean).join(" · "))}</div>
           ${w.meaningVi ? `<div class="wc-mean">${esc(w.meaningVi)}</div>` : ""}${w.defEn ? `<div class="wc-def">${esc(w.defEn)}</div>` : ""}
           ${exs.length ? `<ol class="wc-exs">${exs.map((s, i) => `<li><button type="button" class="ex-say" data-fex="${i}" aria-label="Nghe câu">🔊</button> ${mark(w, s)}</li>`).join("")}</ol>` : ""}
           ${siblings(w).length ? `<div class="flash-fam">🧩 Cùng họ: ${siblings(w).map((x) => `<b>${esc(x.word)}</b>${x.pos ? ` <i>${esc(x.pos)}</i>` : ""}${x.meaningVi ? ` – ${esc(x.meaningVi.split(/[;,]/)[0])}` : ""}`).join(" · ")}</div>` : ""}
-          <div class="toolbar flash-acts"><button class="btn answer" data-again>😕 Chưa nhớ<small>ôn lại sau ${GAP_NAMES[gaps(w)[0]]}</small></button>
-            <button class="btn primary answer" data-good>🙂 Nhớ rồi<small>${nextGap(w, R.again.has(w.id))}</small></button></div>
+          <div class="toolbar flash-acts" role="group" aria-label="Từ này để nói hay để đọc">
+            <button class="btn answer${isReading(w) ? "" : " primary"}" data-ans="speaking" title="Từ để nói: ôn 6 lần">🗣 Speaking<small>${nextGap({ ...w, use: "speaking" })}</small></button>
+            <button class="btn answer${isReading(w) ? " primary" : ""}" data-ans="reading" title="Từ để đọc hiểu: ôn 3 lần">📖 Reading<small>${nextGap({ ...w, use: "reading" })}</small></button></div>
           <button type="button" class="linkish flash-known" data-known>✓ Thuộc rồi, không cần ôn nữa</button>
     </div>`;
     box.querySelector("[data-say]").onclick = () => sayWord(w.word);
@@ -952,25 +951,23 @@
     // Every step is kept (word schedule + round) so ◀ Trước can undo it.
     const step = (fn) => {
       R.history = [...(R.history || []), { id: w.id, queue: [...R.queue], again: [...R.again], done: R.done,
-        before: { stage: w.stage, learnedAt: w.learnedAt ?? null, lastReview: w.lastReview ?? null, due: w.due ?? null } }];
+        before: { stage: w.stage, learnedAt: w.learnedAt ?? null, lastReview: w.lastReview ?? null, due: w.due ?? null, use: w.use ?? null } }];
       fn();
       renderReview();
       updateNav();
     };
-    const answer = (ok) => {
+    // 🗣 Speaking / 📖 Reading: the answer. The word goes to that list and on to its next step there
+    // (Speaking: 6 times in all, Reading: 3), so the button says when it comes back.
+    const answer = (use) => {
       if (Date.now() - (R.shownAt || 0) < 400) return; // a second tap meant for the previous card
       step(() => {
-        const failedBefore = R.again.has(w.id);
-        update(w.id, advance(w, ok, failedBefore));
+        update(w.id, { use, ...advance({ ...w, use }, true) });
         R.queue.shift();
-        if (!ok) R.again.add(w.id);
-        if (!ok && !failedBefore) R.queue.push(w.id); // once more at the end of today's round, only once
-        R.done += ok ? 1 : 0;
+        R.done += 1;
         SE.track("review");
       });
     };
-    box.querySelector("[data-again]")?.addEventListener("click", () => answer(false));
-    box.querySelector("[data-good]")?.addEventListener("click", () => answer(true));
+    box.querySelectorAll("[data-ans]").forEach((b) => { b.onclick = () => answer(b.dataset.ans); });
     // Tiếp ▶: skip this word in this round, without an answer (it stays due).
     box.querySelector("[data-next]").onclick = () => step(() => { R.queue.shift(); });
     // ✓ Thuộc rồi: known for good, no more reviews (shown as "Đã thuộc" in the list).
@@ -980,7 +977,7 @@
       R.done += 1;
     });
     box.querySelector("[data-back]").onclick = back;
-    box.querySelectorAll("[data-use]").forEach((b) => { b.onclick = () => { setUse(w.id, b.dataset.use); renderReview(); }; });
+
   }
 
   function updateNav() {
