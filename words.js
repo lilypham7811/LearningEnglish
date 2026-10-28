@@ -17,9 +17,17 @@
   // Stage 0 = new (saved, not learned yet). Learning it = its first review; then each review comes
   // 2, 4, 7, 14 and 30 days after the one before. After review 5 the word is learned (MASTERED).
   // A word studied today never comes back tomorrow (that day goes to other words), whatever the answer.
+  // Two lists: words for Speaking are studied 6 times (learning + 5 reviews); words for Reading, too hard to say
+  // and only needed to understand, 3 times (learning, then after 4 days and 2 weeks). Speaking comes first.
+  // A word with no list yet counts as Speaking; the list is chosen on the flashcard or in the table.
   const OFFSETS = [2, 4, 7, 14, 30];
+  const READ_OFFSETS = [4, 14];
   const FUZZ = [1, 1, 2, 3, 3];        // days a review may move to keep days under the limit (the first only later)
-  const MASTERED = OFFSETS.length + 1;
+  const MASTERED = OFFSETS.length + 1; // a Speaking word's last step
+  const isReading = (w) => w.use === "reading";
+  const gaps = (w) => (isReading(w) ? READ_OFFSETS : OFFSETS);
+  const doneAt = (w) => gaps(w).length + 1; // 6 for Speaking, 3 for Reading
+  const known = (w) => w.stage >= doneAt(w);
   const DAILY = 10;                    // at most 10 words a day: reviews that are due first, then new words
   const NEW_MIN = 3;                   // …but always room for 3 new words, so every saved word gets its turn
   const pref = (k, d) => { try { return localStorage.getItem("se_" + k) ?? d; } catch { return d; } };
@@ -36,7 +44,7 @@
   const clean = (w) => (w || "").replace(/[’‘]/g, "'").replace(/^[^A-Za-z]+|[^A-Za-z]+$/g, "").trim();
   const startOfDay = (t) => { const d = new Date(t); d.setHours(0, 0, 0, 0); return d.getTime(); };
   const today = () => startOfDay(Date.now());
-  const isDue = (w) => w.stage >= 1 && w.stage < MASTERED && w.due != null && startOfDay(w.due) <= today();
+  const isDue = (w) => w.stage >= 1 && !known(w) && w.due != null && startOfDay(w.due) <= today();
   const reviewedToday = (w) => w.lastReview && startOfDay(w.lastReview) === today();
   // ---------- Word families ----------
   // metabolism, metabolic, metabolize, metabolically → family "metabol": common endings are taken off
@@ -119,8 +127,10 @@
   // moves on through every saved word. Reviews that don't fit wait for tomorrow. extra: "Học thêm" after that.
   function todayQueue(all = list(), extra = 0) {
     const left = Math.max(0, DAILY - all.filter(reviewedToday).length) + extra;
-    const reviews = all.filter((w) => isDue(w) && !reviewedToday(w)).sort((a, b) => a.due - b.due || a.stage - b.stage);
-    const freshAll = all.filter((w) => w.stage === 0 && !reviewedToday(w)).sort((a, b) => a.savedAt - b.savedAt);
+    // Speaking words before Reading words, in reviews and in new words.
+    const r = (w) => (isReading(w) ? 1 : 0);
+    const reviews = all.filter((w) => isDue(w) && !reviewedToday(w)).sort((a, b) => r(a) - r(b) || a.due - b.due || a.stage - b.stage);
+    const freshAll = all.filter((w) => w.stage === 0 && !reviewedToday(w)).sort((a, b) => r(a) - r(b) || a.savedAt - b.savedAt);
     // A new word brings its new family members along (they are learned together).
     const fresh = [], seenF = new Set();
     for (const w of freshAll) {
@@ -144,22 +154,22 @@
     const now = Date.now();
     if (ok && !failedToday) {
       const learnedAt = w.stage === 0 ? now : w.learnedAt || now;
-      const stage = Math.min(w.stage + 1, MASTERED);
+      const stage = Math.min(w.stage + 1, doneAt(w));
       // A family member already answered today at the same step → the same review day, so they stay together.
       const mate = siblings(w).find((x) => x.stage === stage && x.due != null && reviewedToday(x));
-      return { stage, learnedAt, lastReview: now, due: stage >= MASTERED ? null : mate ? mate.due : pickDay(stage, w.id) };
+      return { stage, learnedAt, lastReview: now, due: stage >= doneAt(w) ? null : mate ? mate.due : pickDay(stage, w.id, gaps(w)) };
     }
-    return { stage: 1, learnedAt: now, lastReview: now, due: pickDay(1, w.id) };
+    return { stage: 1, learnedAt: now, lastReview: now, due: pickDay(1, w.id, gaps(w)) };
   }
   const due = () => todayQueue();
   // Pick the review day: today + 2/4/7/14/30 days for this step, moved up to FUZZ days earlier or later
   // only when that day is nearly full; if all those days are full, look a few days later.
-  function pickDay(stage, id) {
+  function pickDay(stage, id, steps = OFFSETS) {
     const all = list();
     const earliest = today() + OFFSETS[0] * DAY; // never tomorrow: a word studied today makes room for others
-    const target = Math.max(today() + OFFSETS[stage - 1] * DAY, earliest);
-    const loadOn = (day) => all.filter((x) => x.id !== id && x.stage >= 1 && x.stage < MASTERED && x.due != null && startOfDay(x.due) === day).length;
-    const f = FUZZ[stage - 1];
+    const target = Math.max(today() + steps[stage - 1] * DAY, earliest);
+    const loadOn = (day) => all.filter((x) => x.id !== id && x.stage >= 1 && !known(x) && x.due != null && startOfDay(x.due) === day).length;
+    const f = FUZZ[Math.min(stage, FUZZ.length) - 1];
     let best = null;
     for (let extra = 0; extra <= 3 && (!best || best.load >= DAILY); extra++) {
       for (let k = -f; k <= f + extra; k++) {
@@ -484,12 +494,11 @@
 
 
   // ---------- Section ----------
-  const STAGE_NAMES = ["Từ mới", "Ôn sau 2 ngày", "Ôn sau 4 ngày", "Ôn sau 1 tuần", "Ôn sau 2 tuần", "Ôn sau 1 tháng"];
   const dayLabel = (t) => new Date(t).toLocaleDateString("vi-VN", { weekday: "short", day: "2-digit", month: "2-digit" });
   function render() {
     const root = $("view-words");
     const all = list();
-    const mastered = all.filter((w) => w.stage >= MASTERED).length;
+    const mastered = all.filter(known).length;
     root.innerHTML = `<div class="vhead"><div><p class="eyebrow">Phần 2 · Từ vựng</p><h2>Từ vựng</h2></div>
         <dl class="stat-list" aria-label="Thống kê từ vựng">
           <div style="--pc:var(--r5)"><dt>Tổng số từ</dt><dd>${all.length}</dd></div>
@@ -509,7 +518,7 @@
           <input class="input" type="search" id="wordSearch" placeholder="Tìm từ…" value="${esc(ui.q)}" /></div>
       </div>
       <div class="lib-tools">
-        <div class="seg" id="wordFilter">${[["all", "Tất cả"], ["due", "Ôn hôm nay"], ["learning", "Đang học"], ["mastered", "Đã thuộc"], ["video", "Từ video"]]
+        <div class="seg" id="wordFilter">${[["all", "Tất cả"], ["due", "Ôn hôm nay"], ["learning", "Đang học"], ["mastered", "Đã thuộc"], ["speaking", "🗣 Speaking"], ["reading", "📖 Reading"], ["video", "Từ video"]]
           .map(([k, l]) => `<button data-f="${k}" aria-pressed="${ui.f === k}">${l}</button>`).join("")}</div>
         <div class="words-opts">
           <button type="button" class="btn ghost small" id="phoneHelp">📱 Lưu từ trên điện thoại</button>
@@ -573,7 +582,7 @@
     return i < 0 ? esc(sentence) : esc(sentence.slice(0, i)) + `<mark>${esc(sentence.slice(i, i + word.length))}</mark>` + esc(sentence.slice(i + word.length));
   };
   function stageBadge(w, todayIds) {
-    if (w.stage >= MASTERED) return `<span class="chip st-done">✓ Đã thuộc</span>`;
+    if (known(w)) return `<span class="chip st-done">✓ Đã thuộc</span>`;
     if (todayIds.has(w.id)) return `<span class="chip st-due">Ôn hôm nay</span>`;
     if (w.stage === 0) return `<span class="chip st-new">Chờ học</span>`;
     if (isDue(w)) return `<span class="chip">Ôn ngày mai</span>`; // due, but today is already full (10 words)
@@ -587,8 +596,9 @@
     const q = ui.q.trim().toLowerCase();
     const items = list().filter((w) =>
       (!q || (w.word + " " + (w.meaningVi || "") + " " + (w.defEn || "")).toLowerCase().includes(q)) &&
-      (ui.f === "all" || (ui.f === "due" && todayIds.has(w.id)) || (ui.f === "learning" && w.stage < MASTERED) ||
-       (ui.f === "mastered" && w.stage >= MASTERED) || (ui.f === "video" && w.sourceKind === "video")));
+      (ui.f === "all" || (ui.f === "due" && todayIds.has(w.id)) || (ui.f === "learning" && !known(w)) ||
+       (ui.f === "mastered" && known(w)) || (ui.f === "video" && w.sourceKind === "video") ||
+       (ui.f === "speaking" && !isReading(w)) || (ui.f === "reading" && isReading(w))));
     if (!items.length) {
       box.innerHTML = `<tbody><tr><td class="empty-row">${list().length ? "Không có từ nào ở đây. Thử bộ lọc khác." : "Từ vựng còn trống. Mở một video, bấm vào một từ trong phụ đề (hoặc gõ vào ô dưới video) rồi chọn ⭐ Lưu từ."}</td></tr></tbody>`;
       return;
@@ -611,7 +621,8 @@
     box.innerHTML = `<thead><tr><th>Từ</th><th>Dạng từ · Phiên âm</th><th>Nghe · Nói thử</th><th>Nghĩa (Oxford)</th><th>Nghĩa tiếng Việt</th><th>Câu ví dụ</th></tr></thead><tbody>` +
       rows.map((w, i) => famHead(w, i) + `<tr data-id="${w.id}"${ui.group && fams.get(famKey(w)).length > 1 ? ' class="in-fam"' : ""}>
         <td data-label="Từ"><b class="wc-word">${esc(w.word)}</b>${w.form && w.form.toLowerCase() !== w.word.toLowerCase() ? `<small class="wc-form" title="Dạng bạn đã gặp">từ “${esc(w.form)}”</small>` : ""}
-          <div class="wc-meta">${stageBadge(w, todayIds)}</div>
+          <div class="wc-meta">${stageBadge(w, todayIds)}<button type="button" class="use-chip ${isReading(w) ? "reading" : "speaking"}" data-a="use"
+            title="Đổi sang ${isReading(w) ? "Speaking (ôn 6 lần)" : "Reading (ôn 3 lần)"}">${isReading(w) ? "📖 Reading" : "🗣 Speaking"}</button></div>
           ${w.sourceUrl ? `<a class="wc-src" href="${esc(w.sourceUrl)}" target="_blank" rel="noopener" title="${esc(w.sourceTitle || "")}">${w.sourceKind === "video" ? "▶ " + (w.time != null ? fmtT(w.time) : "video") : "↗ nguồn"}</a>` : ""}
           <span class="wc-row-acts"><button type="button" class="wc-edit" data-a="fam" title="Từ cùng họ" aria-label="Từ cùng họ">🧩</button><button type="button" class="wc-edit" data-a="edit" title="Sửa từ" aria-label="Sửa từ">✏️</button><button type="button" class="wc-del" data-a="del" title="Xóa từ" aria-label="Xóa từ">🗑</button></span></td>
         <td data-label="Dạng từ · Phiên âm">${w.pos ? `<span class="chip">${esc(w.pos)}</span>` : ""}<div class="wc-ipa">${esc(w.ipa || "")}</div></td>
@@ -643,6 +654,7 @@
       else if (b.dataset.a === "speak") sayIt(w, b, row.querySelector(".wc-score"));
       else if (b.dataset.a === "edit") openEditor(row, w);
       else if (b.dataset.a === "fam") openFamily(row, w);
+      else if (b.dataset.a === "use") setUse(w.id, isReading(w) ? "speaking" : "reading");
       else if (b.dataset.a === "del" && confirm(`Xóa “${w.word}” khỏi Từ vựng?`)) { saveList(list().filter((x) => x.id !== w.id)); render(); }
     };
   }
@@ -811,7 +823,7 @@
   }
   function creditReview(id) {
     const w = list().find((x) => x.id === id);
-    if (!w || reviewedToday(w) || w.stage >= MASTERED || !(isDue(w) || w.stage === 0)) return;
+    if (!w || reviewedToday(w) || known(w) || !(isDue(w) || w.stage === 0)) return;
     const patch = advance(w, true);
     update(w.id, patch);
     const days = patch.due ? Math.round((patch.due - today()) / DAY) : 0;
@@ -832,6 +844,20 @@
     out.innerHTML = `<span class="badge ${r.score >= 80 ? "good" : r.score >= 60 ? "ok" : "low"}">${r.score}%</span> <span class="muted small">${esc(res.text)}</span>`;
   }
 
+  // Speaking ↔ Reading. A word past the new list's last step is learned; one that was learned as Reading and
+  // becomes Speaking goes on with its reviews (in 2 days).
+  function setUse(id, use) {
+    const w = list().find((x) => x.id === id);
+    if (!w || (w.use || "speaking") === use) return;
+    const next = { ...w, use };
+    const patch = { use };
+    if (known(next)) patch.due = null;
+    else if (next.stage >= 1 && next.due == null) patch.due = pickDay(1, id, gaps(next));
+    update(id, patch);
+    toast(use === "reading" ? `📖 “${w.word}”: từ để đọc, ôn 3 lần` : `🗣 “${w.word}”: từ để nói, ôn 6 lần`);
+    updateNav();
+  }
+
   // ---------- Daily review (flashcards) ----------
   // "Tiếp theo: ngày mai · 2 từ" (or the first day with words to review).
   function nextReview() {
@@ -839,7 +865,7 @@
     const tomorrow = today() + DAY;
     const waiting = all.filter((w) => w.stage === 0).length - due().filter((w) => w.stage === 0).length;
     const more = waiting > 0 ? ` · còn ${waiting} từ mới chờ học` : "";
-    const upcoming = all.filter((w) => w.stage >= 1 && w.stage < MASTERED && w.due != null && startOfDay(w.due) >= tomorrow);
+    const upcoming = all.filter((w) => w.stage >= 1 && !known(w) && w.due != null && startOfDay(w.due) >= tomorrow);
     if (!upcoming.length) return (all.length ? "Chưa có từ hẹn ôn." : "Lưu từ mới để bắt đầu.") + more;
     const day = Math.min(...upcoming.map((w) => startOfDay(w.due)));
     const n = upcoming.filter((w) => startOfDay(w.due) === day).length;
@@ -848,8 +874,8 @@
   // What "Nhớ rồi" does to this word, in words: "ôn lại sau 3 ngày", "… 1 tuần", "đã thuộc".
   const GAP_NAMES = { 2: "2 ngày", 4: "4 ngày", 7: "1 tuần", 14: "2 tuần", 30: "1 tháng" };
   function nextGap(w, failedToday) {
-    const stage = failedToday ? 1 : Math.min(w.stage + 1, MASTERED);
-    return stage >= MASTERED ? "xong, đã thuộc" : `ôn lại sau ${GAP_NAMES[OFFSETS[stage - 1]]}`;
+    const stage = failedToday ? 1 : Math.min(w.stage + 1, doneAt(w));
+    return stage >= doneAt(w) ? "xong, đã thuộc" : `ôn lại sau ${GAP_NAMES[gaps(w)[stage - 1]]}`;
   }
   function renderReview() {
     const box = $("reviewBox");
@@ -907,14 +933,17 @@
     if (R.cardId !== w.id) { R.cardId = w.id; R.shownAt = Date.now(); }
     box.innerHTML = `<div class="panel-body flash">
       <div class="flash-nav"><button type="button" class="btn nav-btn" data-back ${R.history?.length ? "" : "disabled"} title="Quay lại từ trước (huỷ câu trả lời của từ đó)">◀ Back</button>
-        <span class="muted small">Còn ${R.queue.length} từ · ${STAGE_NAMES[Math.min(w.stage, STAGE_NAMES.length - 1)]}</span>
+        <span class="muted small">Còn ${R.queue.length} từ · lần ${Math.min(w.stage + 1, doneAt(w))}/${doneAt(w)}</span>
         <button type="button" class="btn nav-btn" data-next title="Bỏ qua từ này lần này, không chấm (vẫn ôn vào lần sau)">Next ▶</button></div>
       <div class="flash-word">${esc(w.word)} <button type="button" class="btn small" data-say>🔊</button></div>
+      <div class="use-pick" role="group" aria-label="Từ này để">
+        <button type="button" data-use="speaking" aria-pressed="${!isReading(w)}">🗣 Speaking <small>ôn 6 lần</small></button>
+        <button type="button" data-use="reading" aria-pressed="${isReading(w)}">📖 Reading <small>ôn 3 lần</small></button></div>
       <div class="muted">${esc([w.pos, w.ipa].filter(Boolean).join(" · "))}</div>
           ${w.meaningVi ? `<div class="wc-mean">${esc(w.meaningVi)}</div>` : ""}${w.defEn ? `<div class="wc-def">${esc(w.defEn)}</div>` : ""}
           ${exs.length ? `<ol class="wc-exs">${exs.map((s, i) => `<li><button type="button" class="ex-say" data-fex="${i}" aria-label="Nghe câu">🔊</button> ${mark(w, s)}</li>`).join("")}</ol>` : ""}
           ${siblings(w).length ? `<div class="flash-fam">🧩 Cùng họ: ${siblings(w).map((x) => `<b>${esc(x.word)}</b>${x.pos ? ` <i>${esc(x.pos)}</i>` : ""}${x.meaningVi ? ` – ${esc(x.meaningVi.split(/[;,]/)[0])}` : ""}`).join(" · ")}</div>` : ""}
-          <div class="toolbar flash-acts"><button class="btn answer" data-again>😕 Chưa nhớ<small>ôn lại sau 2 ngày</small></button>
+          <div class="toolbar flash-acts"><button class="btn answer" data-again>😕 Chưa nhớ<small>ôn lại sau ${GAP_NAMES[gaps(w)[0]]}</small></button>
             <button class="btn primary answer" data-good>🙂 Nhớ rồi<small>${nextGap(w, R.again.has(w.id))}</small></button></div>
           <button type="button" class="linkish flash-known" data-known>✓ Thuộc rồi, không cần ôn nữa</button>
     </div>`;
@@ -946,11 +975,12 @@
     box.querySelector("[data-next]").onclick = () => step(() => { R.queue.shift(); });
     // ✓ Thuộc rồi: known for good, no more reviews (shown as "Đã thuộc" in the list).
     box.querySelector("[data-known]").onclick = () => step(() => {
-      update(w.id, { stage: MASTERED, learnedAt: w.learnedAt || Date.now(), lastReview: Date.now(), due: null });
+      update(w.id, { stage: doneAt(w), learnedAt: w.learnedAt || Date.now(), lastReview: Date.now(), due: null });
       R.queue.shift();
       R.done += 1;
     });
     box.querySelector("[data-back]").onclick = back;
+    box.querySelectorAll("[data-use]").forEach((b) => { b.onclick = () => { setUse(w.id, b.dataset.use); renderReview(); }; });
   }
 
   function updateNav() {
