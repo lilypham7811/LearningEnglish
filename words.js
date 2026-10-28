@@ -933,17 +933,19 @@
     // quick second tap on the previous card's answer doesn't answer this one too.
     if (R.cardId !== w.id) { R.cardId = w.id; R.shownAt = Date.now(); }
     box.innerHTML = `<div class="panel-body flash">
-      <div class="flash-nav"><button type="button" class="btn nav-btn" data-back ${R.history?.length ? "" : "disabled"} title="Quay lại từ trước (huỷ câu trả lời của từ đó)">◀ Back</button>
-        <span class="muted small">Còn ${R.queue.length} từ · lần ${Math.min(w.stage + 1, doneAt(w))}/${doneAt(w)}</span>
-        <button type="button" class="btn nav-btn" data-next title="Bỏ qua từ này lần này, không chấm (vẫn ôn vào lần sau)">Next ▶</button></div>
+      <div class="muted small">Còn ${R.queue.length} từ · lần ${Math.min(w.stage + 1, doneAt(w))}/${doneAt(w)}</div>
       <div class="flash-word">${esc(w.word)} <button type="button" class="btn small" data-say>🔊</button></div>
       <div class="muted">${esc([w.pos, w.ipa].filter(Boolean).join(" · "))}</div>
           ${w.meaningVi ? `<div class="wc-mean">${esc(w.meaningVi)}</div>` : ""}${w.defEn ? `<div class="wc-def">${esc(w.defEn)}</div>` : ""}
           ${exs.length ? `<ol class="wc-exs">${exs.map((s, i) => `<li><button type="button" class="ex-say" data-fex="${i}" aria-label="Nghe câu">🔊</button> ${mark(w, s)}</li>`).join("")}</ol>` : ""}
           ${siblings(w).length ? `<div class="flash-fam">🧩 Cùng họ: ${siblings(w).map((x) => `<b>${esc(x.word)}</b>${x.pos ? ` <i>${esc(x.pos)}</i>` : ""}${x.meaningVi ? ` – ${esc(x.meaningVi.split(/[;,]/)[0])}` : ""}`).join(" · ")}</div>` : ""}
-          <div class="toolbar flash-acts" role="group" aria-label="Từ này để nói hay để đọc">
-            <button class="btn answer${isReading(w) ? "" : " primary"}" data-ans="speaking" title="Từ để nói: ôn 6 lần">🗣 Speaking<small>${nextGap({ ...w, use: "speaking" })}</small></button>
-            <button class="btn answer${isReading(w) ? " primary" : ""}" data-ans="reading" title="Từ để đọc hiểu: ôn 3 lần">📖 Reading<small>${nextGap({ ...w, use: "reading" })}</small></button></div>
+          <div class="flash-bottom">
+            <button type="button" class="btn nav-btn" data-back ${R.history?.length ? "" : "disabled"} title="Quay lại từ trước (huỷ câu trả lời của từ đó)">◀ Back</button>
+            <div class="toolbar flash-acts" role="group" aria-label="Từ này để nói hay để đọc">
+              <button class="btn answer${isReading(w) ? "" : " primary"}" data-ans="speaking" title="Từ để nói: ôn 6 lần">🗣 Speaking<small>${nextGap({ ...w, use: "speaking" })}</small></button>
+              <button class="btn answer${isReading(w) ? " primary" : ""}" data-ans="reading" title="Từ để đọc hiểu: ôn 3 lần">📖 Reading<small>${nextGap({ ...w, use: "reading" })}</small></button></div>
+            <button type="button" class="btn nav-btn" data-next title="Bỏ qua từ này lần này, không chấm (vẫn ôn vào lần sau)">Next ▶</button>
+          </div>
           <button type="button" class="linkish flash-known" data-known>✓ Thuộc rồi, không cần ôn nữa</button>
     </div>`;
     box.querySelector("[data-say]").onclick = () => sayWord(w.word);
