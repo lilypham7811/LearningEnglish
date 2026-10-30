@@ -751,3 +751,24 @@ h2 { font-weight: 800; letter-spacing: -0.02em; }
   .flash-bottom .flash-acts { grid-column: 1 / -1; grid-row: 1; }
   .flash-bottom [data-back], .flash-bottom [data-next] { grid-row: 2; }
 }
+
+/* 🎧 Nghe & nói theo (Từ vựng) */
+.loop-bar { position: fixed; left: 50%; bottom: calc(1rem + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); z-index: 55; width: min(46rem, calc(100vw - 24px)); display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .8rem 1rem; padding: .9rem 1.1rem; background: var(--surface); border: 2px solid var(--r5); border-radius: 1rem; box-shadow: 0 18px 50px -12px rgba(0,0,0,.35); }
+.loop-main { min-width: 0; flex: 1 1 18rem; }
+.loop-meta { font-size: .8rem; color: var(--ink-3); font-weight: 600; }
+.loop-word { font-family: var(--f-display); font-size: 2rem; font-weight: 700; line-height: 1.15; margin-top: .1rem; overflow-wrap: anywhere; }
+.loop-word small { font-family: var(--f-body); font-size: .95rem; font-weight: 500; color: var(--ink-2); }
+.loop-word.on { color: var(--r5); }
+.loop-vi { color: var(--ink-2); font-size: .95rem; }
+.loop-ex { margin-top: .35rem; font-size: 1.15rem; font-weight: 600; line-height: 1.35; }
+.loop-ex.on { color: var(--r5); }
+.loop-ctl { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem; }
+.loop-rate { display: inline-flex; align-items: center; gap: .35rem; font-size: .82rem; color: var(--ink-2); }
+.loop-rate select { min-height: 2rem; border: 1px solid var(--line); border-radius: .4rem; background: var(--surface); padding: 0 .4rem; font: inherit; }
+
+/* 🔊 Đọc cả bài (Bài báo) */
+.read-all { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem .8rem; margin: .6rem 0 .4rem; padding: .7rem .8rem; border-radius: .8rem; background: color-mix(in srgb, var(--r5) 8%, var(--surface)); border: 1px solid color-mix(in srgb, var(--r5) 30%, var(--surface)); }
+.read-all label { display: inline-flex; align-items: center; gap: .35rem; font-size: .85rem; color: var(--ink-2); }
+.read-all select { min-height: 2.1rem; border: 1px solid var(--line); border-radius: .45rem; background: var(--surface); padding: 0 .4rem; font: inherit; color: var(--ink); }
+.read-pos { font-size: .85rem; font-weight: 600; color: var(--r5); }
+.reader-text .sent.on { background: color-mix(in srgb, var(--r5) 16%, transparent); border-radius: .3rem; box-shadow: 0 0 0 2px color-mix(in srgb, var(--r5) 16%, transparent); }

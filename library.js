@@ -738,8 +738,15 @@
         <span class="chip">${esc(item.site || hostOf(item.url))}</span>
         <h3 class="d-title">${esc(item.title)}</h3><div class="card-meta">Lưu ngày ${dateVi(item.savedAt)}${item.text ? ` · ${words(item.text)} từ · ~${Math.max(1, Math.round(words(item.text) / 200))} phút đọc` : ""}</div>
         <div class="toolbar d-acts"><a class="btn" href="${esc(item.url)}" target="_blank" rel="noopener" data-open-link>↗ Mở bài gốc</a><button class="btn ghost danger" data-del>🗑 Xóa</button></div>
+        ${item.text ? `<div class="read-all">
+            <button class="btn primary" data-readall>🔊 Đọc cả bài (chậm)</button>
+            <button class="btn" data-readpause hidden>⏸ Tạm dừng</button>
+            <label>Tốc độ <select data-readrate>${[["0.65", "Rất chậm"], ["0.8", "Chậm"], ["1", "Bình thường"]].map(([v, l]) => `<option value="${v}" ${readPref("readRate", "0.8") === v ? "selected" : ""}>${l}</option>`).join("")}</select></label>
+            <label>Nghỉ giữa câu <select data-readgap>${[["0", "Không"], ["1", "1 giây"], ["2", "2 giây"], ["3", "3 giây"]].map(([v, l]) => `<option value="${v}" ${readPref("readGap", "1") === v ? "selected" : ""}>${l}</option>`).join("")}</select></label>
+            <span class="read-pos" data-readpos></span>
+          </div>` : ""}
         ${item.text
-          ? `<p class="hint small">💡 Chạm vào một từ để lưu, nghe từ hoặc nghe cả câu.</p><div class="reader-text">${paragraphs(item.text)}</div>`
+          ? `<p class="hint small">💡 Chạm vào một từ để lưu, nghe từ hoặc nghe cả câu. Đang đọc cả bài thì chạm vào câu khác để đọc tiếp từ câu đó.</p><div class="reader-text">${paragraphs(item.text)}</div>`
           : `<div class="status warn">Chưa có nội dung bài. Bấm một gợi ý ✨ bên Google AI để AI tự đọc bài từ link, hoặc dán nội dung vào đây:</div>
              <textarea class="input" rows="6" data-paste placeholder="Dán nội dung bài báo…"></textarea><div class="toolbar"><button class="btn primary" data-save-text>Lưu nội dung</button></div>`}
       </div></div>`;
@@ -900,8 +907,65 @@
     });
   }
 
+  // ---------- Bài báo: read the whole article aloud, slowly, sentence by sentence ----------
+  const readPref = (k, d) => { try { return localStorage.getItem("se_" + k) ?? d; } catch { return d; } };
+  const setReadPref = (k, v) => { try { localStorage.setItem("se_" + k, v); } catch { /* private mode */ } };
+  function wireReadAll(box) {
+    const btn = box.querySelector("[data-readall]");
+    if (!btn) return;
+    const pauseBtn = box.querySelector("[data-readpause]"), pos = box.querySelector("[data-readpos]");
+    const R = (box._read = { on: false, paused: false, token: 0, idx: 0, lock: null });
+    const sents = () => [...box.querySelectorAll(".reader-text .sent")];
+    const alive = (t) => t === R.token && R.on && btn.isConnected;
+    const sleep = (ms, t) => new Promise((res) => { const t0 = Date.now(); const tick = () => (!alive(t) ? res() : R.paused || Date.now() - t0 < ms ? setTimeout(tick, 100) : res()); tick(); });
+    const show = () => {
+      btn.textContent = R.on ? "■ Dừng đọc" : "🔊 Đọc cả bài (chậm)";
+      pauseBtn.hidden = !R.on;
+      pauseBtn.textContent = R.paused ? "▶ Tiếp tục" : "⏸ Tạm dừng";
+      const n = sents().length;
+      pos.textContent = R.on ? `Câu ${Math.min(R.idx + 1, n)}/${n}${R.paused ? " · đã tạm dừng" : ""}` : "";
+    };
+    async function run(t) {
+      const list = sents();
+      while (alive(t) && R.idx < list.length) {
+        await sleep(0, t);
+        if (!alive(t)) return;
+        const s = list[R.idx];
+        list.forEach((x) => x.classList.remove("on"));
+        s.classList.add("on");
+        s.scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "center" });
+        show();
+        await SE.say(s.textContent, parseFloat(readPref("readRate", "0.8")));
+        if (!alive(t)) return;
+        if (R.paused) continue; // paused mid-sentence: read it again after resuming
+        await sleep(parseFloat(readPref("readGap", "1")) * 1000, t);
+        R.idx++;
+      }
+      if (alive(t)) { stop(); toast("🔊 Đã đọc hết bài."); }
+    }
+    function restart() { SE.stopAll(); R.paused = false; const t = ++R.token; run(t); }
+    async function start() {
+      Object.assign(R, { on: true, paused: false, idx: Math.max(0, sents().findIndex((x) => x.classList.contains("on"))) });
+      try { R.lock = await navigator.wakeLock?.request("screen"); } catch { R.lock = null; }
+      SE.track("listen"); restart();
+    }
+    function stop() {
+      R.on = false; R.paused = false; R.token++; SE.stopAll();
+      try { R.lock?.release(); } catch { /* already released */ }
+      R.lock = null; sents().forEach((x) => x.classList.remove("on")); show();
+    }
+    R.jump = (s) => { R.idx = Math.max(0, sents().indexOf(s)); restart(); };
+    btn.onclick = () => (R.on ? stop() : start());
+    pauseBtn.onclick = () => { R.paused = !R.paused; if (R.paused) SE.stopAll(); show(); };
+    box.querySelector("[data-readrate]").onchange = (e) => setReadPref("readRate", e.target.value);
+    box.querySelector("[data-readgap]").onchange = (e) => setReadPref("readGap", e.target.value);
+    document.addEventListener("se:view", () => { if (R.on) stop(); }, { once: true });
+  }
+
   function wireDetail(kind, item) {
     const box = $("detail-" + kind);
+    if (box._read?.on) { box._read.on = false; box._read.token++; SE.stopAll(); } // a new article opened: stop the old one
+    if (kind === "article") wireReadAll(box);
     box.querySelector("[data-open-link]")?.addEventListener("click", () => SE.track("open"));
     box.querySelector("[data-del]").onclick = () => {
       if (!confirm(`Xóa “${item.title}”?`)) return;
@@ -936,6 +1000,7 @@
       const s = e.target.closest(".sent");
       if (!s || getSelection().toString().trim()) return; // selecting a word to save it, not listening
       if (window.SE_WORDS?.tapWord(e, s)) return; // a word: ⭐ Lưu từ · 🔊 · ▶ Câu
+      if (box._read?.on) return box._read.jump(s);
       box.querySelectorAll(".sent.on").forEach((x) => x.classList.remove("on"));
       s.classList.add("on");
       SE.track("read");

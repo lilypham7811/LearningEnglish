@@ -523,6 +523,7 @@
         <div class="seg" id="wordFilter">${[["all", "Tất cả"], ["due", "Ôn hôm nay"], ["learning", "Đang học"], ["mastered", "Đã thuộc"], ["speaking", "🗣 Speaking"], ["reading", "📖 Reading"], ["video", "Từ video"]]
           .map(([k, l]) => `<button data-f="${k}" aria-pressed="${ui.f === k}">${l}</button>`).join("")}</div>
         <div class="words-opts">
+          <button type="button" class="btn primary small" id="loopBtn" aria-pressed="${LOOP.on}">${LOOP.on ? "■ Dừng nghe" : "🎧 Nghe & nói theo"}</button>
           <button type="button" class="btn ghost small" id="phoneHelp">📱 Lưu từ trên điện thoại</button>
           <label class="fam-toggle"><input type="checkbox" id="famToggle" ${ui.group ? "checked" : ""} /> 🧩 Gom theo họ từ</label>
           <div class="seg seg-sm" id="accentSeg" title="Giọng đọc từ: bản ghi âm của từ điển Oxford">${[["gb", "🔊 Giọng Anh"], ["us", "Giọng Mỹ"]]
@@ -541,6 +542,7 @@
       toast("Chưa đọc được chữ đã chép. Giữ ngón tay vào ô “Thêm từ mới”, chọn Dán, rồi bấm Thêm.");
     };
     root.querySelector("#phoneHelp").onclick = openPhoneHelp;
+    root.querySelector("#loopBtn").onclick = () => (LOOP.on ? stopLoop() : startLoop());
     root.querySelector("#wordSearch").oninput = (e) => { ui.q = e.target.value; renderList(); };
     root.querySelector("#famToggle").onchange = (e) => { ui.group = e.target.checked; setPref("wordsGroup", ui.group ? "1" : "0"); renderList(); };
     root.querySelector("#accentSeg").onclick = (e) => {
@@ -988,9 +990,151 @@
     $("navWords").textContent = n ? `${n} từ${d ? ` · ${d} cần ôn hôm nay` : ""}` : "Lưu từ mới để ôn";
   }
 
+  // ---------- 🎧 Nghe & nói theo ----------
+  // Plays today's words first (the "Ôn hôm nay" list), then the other words in the chosen filter: each word
+  // 5 times, slowly, with a pause after each time to say it back; then its easiest everyday example 5 times.
+  // Finishing a word that is on today's list counts as today's review (like hearing the word and an example).
+  const LOOP = { on: false, paused: false, token: 0, idx: 0, items: [], todayIds: new Set(), audio: null, lock: null,
+    rate: parseFloat(pref("loopRate", "0.8")) || 0.8 };
+  const REPS = 5;
+  const wait = (ms, token) => new Promise((res) => {
+    const t0 = Date.now();
+    const tick = () => (token !== LOOP.token || !LOOP.on ? res() : LOOP.paused || Date.now() - t0 < ms ? setTimeout(tick, 100) : res());
+    tick();
+  });
+  function loopWords() {
+    const inFilter = (w) => (ui.f === "speaking" ? !isReading(w) : ui.f === "reading" ? isReading(w) : true);
+    const today = due().filter(inFilter), ids = new Set(today.map((w) => w.id));
+    const rest = list().filter((w) => inFilter(w) && !ids.has(w.id))
+      .sort((a, b) => (known(a) ? 1 : 0) - (known(b) ? 1 : 0) || (a.due || Infinity) - (b.due || Infinity) || (a.savedAt || 0) - (b.savedAt || 0));
+    return { items: [...today, ...rest], todayIds: ids };
+  }
+  // The easiest example to use in conversation: the shortest everyday sentence (4–14 words), the learner's own first.
+  function easyExample(w) {
+    const n = (x) => x.split(/\s+/).length;
+    const all = [...(w.myExamples || []), ...(w.examples || []), ...(w.context ? [w.context] : [])].map((x) => String(x).trim()).filter(Boolean);
+    const good = all.filter((x) => n(x) >= 4 && n(x) <= 14).sort((a, b) => n(a) - n(b));
+    return good[0] || all[0] || "";
+  }
+  // Oxford's recording of the word, found without playing it.
+  async function oxUrl(word) {
+    const w = word.trim().toLowerCase();
+    if (!/^[a-z]+$/.test(w)) return "";
+    const key = ui.accent + ":" + w;
+    if (oxFound.has(key)) return oxFound.get(key);
+    const order = ui.accent === "us" ? [["us_pron", "us"], ["uk_pron", "gb"]] : [["uk_pron", "gb"], ["us_pron", "us"]];
+    for (const u of order.flatMap(([dir, t]) => [`${w}__${t}_1`, `${w}_1__${t}_1`, `${w}__${t}_2`].map((n) => oxFile(dir, n)))) {
+      const ok = await new Promise((res) => { const a = new Audio(); a.preload = "auto"; a.oncanplaythrough = () => res(true); a.onerror = () => res(false); setTimeout(() => res(false), 4000); a.src = u; });
+      if (ok) { oxFound.set(key, u); return u; }
+    }
+    oxFound.set(key, "");
+    return "";
+  }
+  function playToEnd(url, rate) {
+    return new Promise((res) => {
+      const a = (LOOP.audio = new Audio(url));
+      a.playbackRate = rate; a.preservesPitch = true;
+      a.onended = () => res(true); a.onerror = () => res(false);
+      a.play().catch(() => res(false));
+    });
+  }
+  // Says the text slowly and returns how long it took (the pause after it is based on that).
+  async function speakSlow(text, isWord) {
+    const t0 = Date.now();
+    const url = isWord ? await oxUrl(text) : "";
+    if (!(url && (await playToEnd(url, Math.max(0.6, LOOP.rate))))) await SE.say(text, LOOP.rate * 0.9);
+    return Date.now() - t0;
+  }
+  function loopBar() {
+    let bar = $("loopBar");
+    if (!bar) {
+      bar = document.createElement("div");
+      bar.id = "loopBar"; bar.className = "loop-bar"; bar.setAttribute("role", "region"); bar.setAttribute("aria-label", "Nghe và nói theo");
+      document.body.appendChild(bar);
+      bar.onclick = (e) => {
+        const b = e.target.closest("[data-loop]"); if (!b) return;
+        const a = b.dataset.loop;
+        if (a === "pause") { LOOP.paused = !LOOP.paused; if (LOOP.paused) { SE.stopAll(); LOOP.audio?.pause(); } showLoop(); }
+        else if (a === "next") { LOOP.idx++; restartLoop(); }
+        else if (a === "prev") { LOOP.idx = Math.max(0, LOOP.idx - 1); restartLoop(); }
+        else if (a === "stop") stopLoop();
+      };
+      bar.onchange = (e) => {
+        if (e.target.id !== "loopRate") return;
+        LOOP.rate = parseFloat(e.target.value); setPref("loopRate", String(LOOP.rate));
+      };
+    }
+    return bar;
+  }
+  function showLoop(now = LOOP.now) {
+    LOOP.now = now;
+    const bar = loopBar(), w = LOOP.items[LOOP.idx];
+    if (!LOOP.on || !w) { bar.hidden = true; return; }
+    bar.hidden = false;
+    const step = now ? `${now.isWord ? "Từ" : "Câu ví dụ"} · lần ${now.rep}/${REPS}` : "Đang chuẩn bị…";
+    bar.innerHTML = `<div class="loop-main">
+        <div class="loop-meta">🎧 Từ ${LOOP.idx + 1}/${LOOP.items.length}${LOOP.todayIds.has(w.id) ? " · ôn hôm nay" : ""} · ${step}${LOOP.paused ? " · đã tạm dừng" : ""}</div>
+        <div class="loop-word${now && now.isWord ? " on" : ""}">${esc(w.word)} ${w.ipa ? `<small>${esc(w.ipa)}</small>` : ""}</div>
+        ${w.meaningVi ? `<div class="loop-vi">${esc(w.meaningVi)}</div>` : ""}
+        ${now && !now.isWord ? `<div class="loop-ex on">${esc(now.text)}</div>` : ""}
+      </div>
+      <div class="loop-ctl">
+        <label class="loop-rate">Tốc độ <select id="loopRate">${[["0.65", "Rất chậm"], ["0.8", "Chậm"], ["1", "Bình thường"]]
+          .map(([v, l]) => `<option value="${v}" ${Math.abs(LOOP.rate - parseFloat(v)) < 0.01 ? "selected" : ""}>${l}</option>`).join("")}</select></label>
+        <button class="btn small" data-loop="prev" title="Từ trước">⏮</button>
+        <button class="btn primary small" data-loop="pause">${LOOP.paused ? "▶ Tiếp tục" : "⏸ Tạm dừng"}</button>
+        <button class="btn small" data-loop="next" title="Từ tiếp theo">⏭</button>
+        <button class="btn small" data-loop="stop">■ Dừng</button>
+      </div>`;
+  }
+  async function runLoop(token) {
+    while (LOOP.on && token === LOOP.token && LOOP.idx < LOOP.items.length) {
+      const w = LOOP.items[LOOP.idx], ex = easyExample(w);
+      const parts = [[w.word, true], ...(ex ? [[ex, false]] : [])];
+      for (const [text, isWord] of parts) {
+        for (let rep = 1; rep <= REPS; rep++) {
+          await wait(0, token);
+          if (token !== LOOP.token || !LOOP.on) return;
+          showLoop({ text, isWord, rep });
+          const took = await speakSlow(text, isWord);
+          if (token !== LOOP.token || !LOOP.on) return;
+          if (LOOP.paused) { rep--; continue; } // paused in the middle: say it again after resuming
+          // Time to say it back: a bit longer than it took to hear it.
+          await wait(isWord ? Math.max(1600, took * 1.6 + 700) : Math.max(2500, took * 1.3 + 1200), token);
+        }
+      }
+      if (LOOP.todayIds.has(w.id)) { studied(w.id, "word"); studied(w.id, "ex"); }
+      LOOP.idx++;
+    }
+    if (token === LOOP.token && LOOP.on) { toast("🎧 Đã nghe hết danh sách."); stopLoop(); }
+  }
+  function restartLoop() {
+    SE.stopAll(); LOOP.audio?.pause(); LOOP.paused = false;
+    if (LOOP.idx >= LOOP.items.length) return stopLoop();
+    const token = ++LOOP.token; LOOP.now = null; showLoop(); runLoop(token);
+  }
+  async function startLoop() {
+    const { items, todayIds } = loopWords();
+    if (!items.length) return toast("Chưa có từ nào để nghe trong danh sách này.");
+    Object.assign(LOOP, { on: true, paused: false, idx: 0, items, todayIds, now: null });
+    try { LOOP.lock = await navigator.wakeLock?.request("screen"); } catch { LOOP.lock = null; } // keep the screen on
+    renderLoopBtn(); restartLoop();
+  }
+  function stopLoop() {
+    LOOP.on = false; LOOP.paused = false; LOOP.token++;
+    SE.stopAll(); LOOP.audio?.pause();
+    try { LOOP.lock?.release(); } catch { /* already released */ }
+    LOOP.lock = null; showLoop(); renderLoopBtn();
+  }
+  function renderLoopBtn() {
+    const b = $("loopBtn"); if (!b) return;
+    b.textContent = LOOP.on ? "■ Dừng nghe" : "🎧 Nghe & nói theo";
+    b.setAttribute("aria-pressed", LOOP.on);
+  }
+
   document.addEventListener("se:view", (e) => {
     closePop();
-    if (e.detail !== "words") return;
+    if (e.detail !== "words") { if (LOOP.on) stopLoop(); return; }
     ui.review = null;
     SE.startSession({ id: "words", title: "Từ vựng", titleVi: "Từ vựng" }, "words");
     render();
