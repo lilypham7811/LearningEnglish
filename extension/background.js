@@ -175,7 +175,10 @@ function grabPage() {
   }
   const root = document.querySelector("article") || document.querySelector("main") || document.body;
   const paras = [...root.querySelectorAll("p")].map((p) => p.innerText.trim()).filter((t) => t.split(/\s+/).length >= 8);
-  const text = paras.length >= 3 ? paras.join("\n\n") : root.innerText;
+  let text = paras.length >= 3 ? paras.join("\n\n") : root.innerText;
+  // Pages that build the article out of reach (e.g. MSN) leave only a few words here: send none, and the
+  // app has GitHub fetch the article instead.
+  if (text.trim().split(/\s+/).length < 60) text = "";
   return {
     url: location.href,
     title: (meta("og:title") || document.title).trim(),

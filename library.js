@@ -76,6 +76,10 @@
   const thumb = (id) => `https://i.ytimg.com/vi/${id}/hqdefault.jpg`;
   const hostOf = (url) => { try { return new URL(url).hostname.replace(/^www\./, ""); } catch { return ""; } };
   const words = (t) => (t || "").trim().split(/\s+/).filter(Boolean).length;
+  // An article "has text" only with a real body: a few words (a caption, a cookie line, what the browser could
+  // read on a page that hides its text, e.g. MSN) count as none, so GitHub fetches the article for it.
+  const MIN_WORDS = 60;
+  const hasText = (a) => words(a?.text) >= MIN_WORDS;
   const dateVi = (t) => new Date(t).toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit", year: "numeric" });
 
   // Add (or merge) an item coming from the page form or the browser extension.
@@ -736,9 +740,9 @@
     } else if (kind === "article") {
       left = `<div class="panel reader"><div class="panel-body">
         <span class="chip">${esc(item.site || hostOf(item.url))}</span>
-        <h3 class="d-title">${esc(item.title)}</h3><div class="card-meta">Lưu ngày ${dateVi(item.savedAt)}${item.text ? ` · ${words(item.text)} từ · ~${Math.max(1, Math.round(words(item.text) / 200))} phút đọc` : ""}</div>
+        <h3 class="d-title">${esc(item.title)}</h3><div class="card-meta">Lưu ngày ${dateVi(item.savedAt)}${hasText(item) ? ` · ${words(item.text)} từ · ~${Math.max(1, Math.round(words(item.text) / 200))} phút đọc` : ""}</div>
         <div class="toolbar d-acts"><a class="btn" href="${esc(item.url)}" target="_blank" rel="noopener" data-open-link>↗ Mở bài gốc</a><button class="btn ghost danger" data-del>🗑 Xóa</button></div>
-        ${item.text ? `<div class="read-all">
+        ${hasText(item) ? `<div class="read-all">
             <button class="btn primary" data-readall>🔊 Đọc cả bài (chậm)</button>
             <button class="btn ${item.aiVoice ? "saved" : "ghost"}" data-aivoice title="GitHub đọc sẵn bài này bằng giọng AI (vài phút)">${item.aiVoice ? "✓ Giọng AI" : "🎙️ Làm giọng AI cho bài này"}</button>
             <span class="ai-voice-state small muted" data-aivoicestate></span>
@@ -748,7 +752,7 @@
             <label class="read-loop" title="Nghe lại nhiều lần, không cần bấm (khi lái xe)">🔁 Nghe <select data-readrepeat>${[["1", "1 lần"], ["3", "3 lần"], ["5", "5 lần"], ["10", "10 lần"], ["0", "Không ngừng"]].map(([v, l]) => `<option value="${v}" ${readPref("listenRepeat", "1") === v ? "selected" : ""}>${l}</option>`).join("")}</select></label>
             <span class="read-pos" data-readpos></span>
           </div>` : ""}
-        ${item.text
+        ${hasText(item)
           ? `<div class="reader-text">${paragraphs(item.text)}</div>`
           : `<div class="status warn">Chưa có nội dung bài. Bấm một gợi ý ✨ bên Google AI để AI tự đọc bài từ link, hoặc dán nội dung vào đây:</div>
              <textarea class="input" rows="6" data-paste placeholder="Dán nội dung bài báo…"></textarea><div class="toolbar"><button class="btn primary" data-save-text>Lưu nội dung</button></div>`}
@@ -1409,7 +1413,7 @@
   // Article text found by GitHub for articles saved by link only (tools/voice/make_articles.py → articles.json).
   function applyArticleTexts(map) {
     for (const a of list("article")) {
-      const e = !a.text && map[a.url];
+      const e = !hasText(a) && map[a.url];
       if (!e || (!e.text && a.textTried)) continue; // text that arrives later is still taken
       const bare = (h) => (h || "").replace(/^www\./, "");
       const placeholder = !a.title || bare(a.title) === bare(hostOf(a.url)) || a.title === "Bài báo";

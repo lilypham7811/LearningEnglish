@@ -12,6 +12,8 @@
   const token = () => (SE.safeGet("syncToken") || "").trim();
   const voiceOf = (who) => SE.safeGet(who === "B" ? "aiVoiceB" : "aiVoiceA") || DEF[who === "B" ? "B" : "A"];
   const norm = (t) => (t || "").replace(/\s+/g, " ").trim();
+  // Same rule as library.js: a few words are not an article (GitHub then fetches the text).
+  const realText = (a) => norm(a?.text).split(" ").filter(Boolean).length >= 60;
   // Short, fast id for a sentence (cyrb53), the same on every device.
   function id(str) {
     let h1 = 0xdeadbeef, h2 = 0x41c6ce57;
@@ -50,7 +52,7 @@
     }
     for (const s of SE.safeGet("speeches") || []) sentencesOf(s.text).forEach((t) => add("A", t));
     // Articles only when chosen ("🎙️ Làm giọng AI cho bài này"): an article is long (40-80 sentences).
-    for (const a of SE.safeGet("articles") || []) if (a.aiVoice && a.text) sentencesOf(a.text).forEach((t) => add("A", t));
+    for (const a of SE.safeGet("articles") || []) if (a.aiVoice && realText(a)) sentencesOf(a.text).forEach((t) => add("A", t));
     return [...out.values()];
   }
 
@@ -79,7 +81,7 @@
     const sigOf = (list) => id(voiceOf("A") + voiceOf("B") + list.map((x) => x.f).join());
     const needEx = () => [...new Set((SE.safeGet("words") || []).filter((w) => (w.exV || 0) < 3).map((w) => w.word.toLowerCase()))].sort();
     // Articles saved by link only: GitHub fetches their text (articles.json).
-    const needText = () => [...new Set((SE.safeGet("articles") || []).filter((a) => a.url && !a.text && !a.textTried).map((a) => a.url))].sort();
+    const needText = () => [...new Set((SE.safeGet("articles") || []).filter((a) => a.url && !realText(a) && !a.textTried).map((a) => a.url))].sort();
     let mine = wanted(), words = needEx(), links = needText();
     if (!force && sigOf(mine) + words.join() + links.join() === SE.safeGet("voiceSig")) return; // nothing new since the last check
     publishing = true;

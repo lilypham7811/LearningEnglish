@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Save to LearningEnglish",
   "short_name": "LearningEnglish",
-  "version": "1.8.0",
+  "version": "1.8.1",
   "description": "Lưu video YouTube, bài báo và từ vựng vào app Shadow English bằng chuột phải → Save to LearningEnglish. Nhắc nhở mỗi lần mở Facebook.",
   "action": {
     "default_title": "Shadow English: mở app (lưu bằng chuột phải → Save to LearningEnglish)"
