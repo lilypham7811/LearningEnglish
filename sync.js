@@ -198,7 +198,15 @@
   }
 
   // ---------- Status in the rail and in Settings ----------
+  // Whose app this is, from the repo name: shadow-english-sync-chong → "👤 chong" (the first learner shows none).
+  function showLearner() {
+    const tag = $("learnerTag");
+    const who = (token() && (SE.safeGet("syncHome") || "").split("/")[1]?.replace(/^shadow-english-sync-?/i, "")) || "";
+    tag.hidden = !who;
+    tag.textContent = who ? `👤 ${who}` : "";
+  }
   function setStatus(mode, msg) {
+    showLearner();
     const last = SE.safeGet("syncLast");
     const time = last ? new Date(last).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" }) : "";
     const text = {

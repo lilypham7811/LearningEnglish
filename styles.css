@@ -796,3 +796,7 @@ h2 { font-weight: 800; letter-spacing: -0.02em; }
 /* 🔁 Nghe 1 · 3 · 5 · 10 lần · Không ngừng */
 .repeat { display: inline-flex; align-items: center; gap: .35rem; font-size: .9rem; font-weight: 600; color: var(--ink-2); }
 .repeat .select, .read-loop select { min-height: 2.2rem; padding: .2rem .5rem; }
+
+/* Whose app: "👤 chong" under the name, when one GitHub account holds several learners */
+.learner { display: inline-block; margin-top: .2rem; padding: .05rem .55rem; border-radius: 99px; font-size: .78rem; font-weight: 700;
+  background: var(--r2); color: #fff; letter-spacing: .01em; }
