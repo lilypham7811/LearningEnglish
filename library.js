@@ -1345,6 +1345,10 @@
   document.addEventListener("se:synced", () => {
     updateNav();
     for (const k of Object.keys(KINDS)) if (!$("view-" + k).hidden && !ui[k].open) render(k);
+    // An open article is left alone while reading, except when it was empty and its text has just arrived
+    // (fetched by GitHub and applied on another device).
+    const a = ui.article.open && getItem("article", ui.article.open);
+    if (a && hasText(a) && !$("view-article").hidden && !document.querySelector("#detail-article .reader-text")) render("article");
   });
 
   // A key added or removed in Settings changes how the AI chat works: redraw the open section.
