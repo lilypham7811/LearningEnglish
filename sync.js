@@ -225,10 +225,12 @@
   }
 
   // ---------- Status in the rail and in Settings ----------
-  // Whose app this is, from the repo name: shadow-english-sync-chong → "👤 chong" (the first learner shows none).
+  // Whose app this is: the name typed in Settings ("Tên hiện trên app"), or else from the repo name
+  // (shadow-english-sync-chong → "👤 chong"; the first learner's repo shows none).
   function showLearner() {
     const tag = $("learnerTag");
-    const who = (token() && (SE.safeGet("syncHome") || "").split("/")[1]?.replace(/^shadow-english-sync-?/i, "")) || "";
+    const who = (SE.safeGet("learnerName") || "").trim() ||
+      (token() && (SE.safeGet("syncHome") || "").split("/")[1]?.replace(/^shadow-english-sync-?/i, "")) || "";
     tag.hidden = !who;
     tag.textContent = who ? `👤 ${who}` : "";
   }
@@ -332,6 +334,9 @@
     if (v) syncNow(); else setStatus("off");
   }
   $("syncNowBtn").onclick = () => useToken($("syncToken").value);
+  $("learnerName").value = SE.safeGet("learnerName") || "";
+  $("learnerName").addEventListener("change", (e) => { SE.safeSet("learnerName", e.target.value.trim()); showLearner(); });
+  document.addEventListener("se:synced", () => { $("learnerName").value = SE.safeGet("learnerName") || ""; showLearner(); });
   $("syncToken").addEventListener("change", () => useToken($("syncToken").value));
   $("settings").addEventListener("close", () => { if ($("syncToken").value.replace(/\s+/g, "") !== token()) useToken($("syncToken").value); });
   $("syncInfo").addEventListener("click", (e) => {

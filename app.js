@@ -1347,7 +1347,7 @@ Name2: English sentence | Vietnamese translation`;
   // Synced lists: every changed item gets updatedAt, every removed item a tombstone, so computer and phone
   // can merge their copies (newest version of each item wins, deletions spread). sync.js does the merging.
   const SYNC_LISTS = ["saved", "videos", "articles", "speeches", "words", "log", "done"];
-  const SYNC_PREFS = ["level", "aiModel", "alwaysAi", "showVi", "voices", "geminiVoice", "geminiKey"];
+  const SYNC_PREFS = ["level", "aiModel", "alwaysAi", "showVi", "voices", "geminiVoice", "geminiKey", "learnerName"];
   function safeSet(k, v) {
     try {
       if (SYNC_LISTS.includes(k) && Array.isArray(v)) v = stampList(k, v);
