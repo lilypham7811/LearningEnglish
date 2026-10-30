@@ -2,8 +2,8 @@
   "manifest_version": 3,
   "name": "Save to LearningEnglish",
   "short_name": "LearningEnglish",
-  "version": "1.6.0",
-  "description": "Lưu video YouTube, bài báo và từ vựng vào app Shadow English bằng chuột phải → Save to LearningEnglish.",
+  "version": "1.7.0",
+  "description": "Lưu video YouTube, bài báo và từ vựng vào app Shadow English bằng chuột phải → Save to LearningEnglish. Nhắc nhở mỗi lần mở Facebook.",
   "action": {
     "default_title": "Shadow English: mở app (lưu bằng chuột phải → Save to LearningEnglish)"
   },
@@ -19,5 +19,18 @@
     "https://lilypham7811.github.io/LearningEnglish/*",
     "https://www.youtube.com/*",
     "https://www.youtube-nocookie.com/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": [
+        "https://www.facebook.com/*",
+        "https://web.facebook.com/*",
+        "https://m.facebook.com/*"
+      ],
+      "js": [
+        "facebook-reminder.js"
+      ],
+      "run_at": "document_idle"
+    }
   ]
 }
