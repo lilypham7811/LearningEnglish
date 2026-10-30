@@ -7,7 +7,7 @@
 (() => {
   "use strict";
   const SE = window.SE;
-  const REPO = "shadow-english-sync", LIST = "voice.json", CACHE = "se-cloudvoice-v1", KEY = "https://cloudvoice.local/";
+  const LIST = "voice.json", CACHE = "se-cloudvoice-v1", KEY = "https://cloudvoice.local/";
   const DEF = { A: "af_heart", B: "am_michael" };
   const token = () => (SE.safeGet("syncToken") || "").trim();
   const voiceOf = (who) => SE.safeGet(who === "B" ? "aiVoiceB" : "aiVoiceA") || DEF[who === "B" ? "B" : "A"];
@@ -63,12 +63,12 @@
     return btoa(bin);
   };
   async function readList(o) {
-    const r = await window.SE_SYNC.gh(`/repos/${o}/${REPO}/contents/${LIST}`);
+    const r = await window.SE_SYNC.gh(`/repos/${o}/contents/${LIST}`);
     if (r.status === 404) return { list: null, sha: null };
     if (!r.ok) throw new Error("voice.json " + r.status);
     const j = await r.json();
     let text = j.content ? fromB64(j.content) : "";
-    if (!text) text = await (await window.SE_SYNC.gh(`/repos/${o}/${REPO}/contents/${LIST}`, { headers: { Accept: "application/vnd.github.raw+json" } })).text();
+    if (!text) text = await (await window.SE_SYNC.gh(`/repos/${o}/contents/${LIST}`, { headers: { Accept: "application/vnd.github.raw+json" } })).text();
     try { return { list: JSON.parse(text), sha: j.sha }; } catch { return { list: null, sha: j.sha }; }
   }
   // Send this device's sentences. The voices: the latest choice wins (a choice made here after the one in
@@ -84,7 +84,7 @@
     if (!force && sigOf(mine) + words.join() + links.join() === SE.safeGet("voiceSig")) return; // nothing new since the last check
     publishing = true;
     try {
-      const o = await window.SE_SYNC.owner();
+      const o = await window.SE_SYNC.home();
       for (let attempt = 0; attempt < 3; attempt++) {
         mine = wanted();
         words = needEx();
@@ -104,7 +104,7 @@
         if (sameVoices && mine.every((x) => (list.items || []).some((y) => y.f === x.f)) && words.every((w) => (list.words || []).includes(w)) && links.every((u) => (list.articles || []).includes(u))) break; // already listed
         const body = { app: "shadow-english", at: Math.max(chosenAt, list?.at || 0), voices,
           items: [...items.values()].sort((a, b) => (a.f < b.f ? -1 : 1)), words, articles: links };
-        const r = await window.SE_SYNC.gh(`/repos/${o}/${REPO}/contents/${LIST}`, { method: "PUT",
+        const r = await window.SE_SYNC.gh(`/repos/${o}/contents/${LIST}`, { method: "PUT",
           body: JSON.stringify({ message: "AI voice: sentences to make", content: toB64(JSON.stringify(body)), ...(sha ? { sha } : {}) }) });
         if (r.status === 409 || r.status === 422) continue; // the other device wrote it first: read again
         if (!r.ok) throw new Error("voice.json " + r.status);
@@ -121,20 +121,20 @@
     clearTimeout(C.timer);
     if (!token() || !window.SE_SYNC) return;
     try {
-      const o = await window.SE_SYNC.owner();
-      const r = await window.SE_SYNC.gh(`/repos/${o}/${REPO}/git/trees/main?recursive=1`, C.treeTag ? { headers: { "If-None-Match": C.treeTag } } : {});
+      const o = await window.SE_SYNC.home();
+      const r = await window.SE_SYNC.gh(`/repos/${o}/git/trees/main?recursive=1`, C.treeTag ? { headers: { "If-None-Match": C.treeTag } } : {});
       if (r.ok) {
         const j = await r.json();
         C.treeTag = r.headers.get("ETag");
         C.have = new Set(j.tree.filter((x) => x.type === "blob" && x.path.startsWith("audio/")).map((x) => x.path));
         const art = j.tree.find((x) => x.path === "articles.json");
         if (art && art.sha !== SE.safeGet("articlesSha")) {
-          const ar = await window.SE_SYNC.gh(`/repos/${o}/${REPO}/contents/articles.json`, { headers: { Accept: "application/vnd.github.raw+json" } });
+          const ar = await window.SE_SYNC.gh(`/repos/${o}/contents/articles.json`, { headers: { Accept: "application/vnd.github.raw+json" } });
           if (ar.ok) { window.SE_LIB?.applyArticleTexts(await ar.json()); SE.rawSet("articlesSha", art.sha); }
         }
         const ex = j.tree.find((x) => x.path === "examples.json");
         if (ex && ex.sha !== SE.safeGet("examplesSha")) {
-          const er = await window.SE_SYNC.gh(`/repos/${o}/${REPO}/contents/examples.json`, { headers: { Accept: "application/vnd.github.raw+json" } });
+          const er = await window.SE_SYNC.gh(`/repos/${o}/contents/examples.json`, { headers: { Accept: "application/vnd.github.raw+json" } });
           if (er.ok) { window.SE_WORDS?.applyDictExamples(await er.json()); SE.rawSet("examplesSha", ex.sha); }
         }
       }
@@ -153,8 +153,8 @@
   }
   // Keep every finished file of the chosen voices on the device (a few at a time, in the background).
   async function fetchFile(f) {
-    const o = await window.SE_SYNC.owner();
-    const r = await window.SE_SYNC.gh(`/repos/${o}/${REPO}/contents/${f}`, { headers: { Accept: "application/vnd.github.raw+json" } });
+    const o = await window.SE_SYNC.home();
+    const r = await window.SE_SYNC.gh(`/repos/${o}/contents/${f}`, { headers: { Accept: "application/vnd.github.raw+json" } });
     if (!r.ok) throw new Error(f + " " + r.status);
     const blob = await r.blob();
     const cache = await caches.open(CACHE);

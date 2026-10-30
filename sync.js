@@ -1,6 +1,9 @@
 // Connects computer and phone: keeps one copy of the learner's data (dialogs, videos, articles, speeches,
 // practice log, settings) in a private GitHub repo, read and written with the learner's own GitHub token.
 // Each device merges that copy with its own: newest version of each item wins, deletions spread.
+// One GitHub account can hold several learners: each has a private repo whose name starts with
+// "shadow-english-sync" (e.g. shadow-english-sync-chong) and a token for that repo only; the app finds the
+// repo from the token, so data never mixes.
 // Also moves data from the old local address (http://localhost:8000) into the online app.
 (() => {
   "use strict";
@@ -81,6 +84,23 @@
     });
     return res;
   }
+  // "owner/repo" of the private repo this token may use (see the top of this file).
+  async function home() {
+    let h = SE.safeGet("syncHome");
+    if (h) return h;
+    const o = await owner();
+    const r = await gh("/user/repos?per_page=100&sort=updated");
+    if (!r.ok) throw new Error(`GitHub báo lỗi ${r.status}.`);
+    const listed = (await r.json()).map((x) => x.full_name).filter((n) => /\/shadow-english-sync[\w.-]*$/i.test(n));
+    // Only repos this token can really open (a token for one learner's repo gets 404 for the others).
+    const names = [];
+    for (const n of listed) if ((await gh(`/repos/${n}`)).ok) names.push(n);
+    // One repo: that one. Several (a token for all repos): the usual name. None: the usual name, which then
+    // explains what's missing.
+    h = names.length === 1 ? names[0] : names.find((n) => n.toLowerCase() === `${o}/${REPO}`.toLowerCase()) || `${o}/${REPO}`;
+    SE.rawSet("syncHome", h);
+    return h;
+  }
   async function owner() {
     let o = SE.safeGet("syncOwner");
     if (o) return o;
@@ -97,11 +117,11 @@
   // doesn't count against the rate limit, so checking every few seconds is fine.
   async function pull(o) {
     const conditional = S.etag && S.remote;
-    const r = await gh(`/repos/${o}/${REPO}/contents/${FILE}`, conditional ? { headers: { "If-None-Match": S.etag } } : {});
+    const r = await gh(`/repos/${o}/contents/${FILE}`, conditional ? { headers: { "If-None-Match": S.etag } } : {});
     if (r.status === 304) return S.remote;
     if (r.status === 404) {
-      const repo = await gh(`/repos/${o}/${REPO}`);
-      if (repo.status === 404) throw new Error(`Mã đồng bộ chưa được cấp quyền cho kho “${REPO}”. Hãy tạo lại mã và chọn kho này.`);
+      const repo = await gh(`/repos/${o}`);
+      if (repo.status === 404) throw new Error(`Mã đồng bộ chưa được cấp quyền cho kho “${o.split("/")[1]}”. Hãy tạo lại mã và chọn kho này (tên kho bắt đầu bằng ${REPO}).`);
       return { data: null, sha: null };
     }
     if (r.status === 401) throw new Error("Mã đồng bộ không đúng hoặc đã hết hạn. Hãy tạo mã mới.");
@@ -110,7 +130,7 @@
     const j = await r.json();
     let text = j.content ? fromB64(j.content) : "";
     if (!text) { // files over 1 MB come without inline content
-      const raw = await gh(`/repos/${o}/${REPO}/contents/${FILE}`, { headers: { Accept: "application/vnd.github.raw+json" } });
+      const raw = await gh(`/repos/${o}/contents/${FILE}`, { headers: { Accept: "application/vnd.github.raw+json" } });
       text = await raw.text();
     }
     const json = JSON.parse(text || "{}");
@@ -122,7 +142,7 @@
     const body = { message: `Sync from ${navigator.userAgent.includes("iPhone") ? "iPhone" : "computer"}`,
       content: toB64(JSON.stringify({ app: "shadow-english", version: 3, updatedAt: new Date().toISOString(), data })) };
     if (sha) body.sha = sha;
-    const r = await gh(`/repos/${o}/${REPO}/contents/${FILE}`, { method: "PUT", body: JSON.stringify(body) });
+    const r = await gh(`/repos/${o}/contents/${FILE}`, { method: "PUT", body: JSON.stringify(body) });
     if (r.status === 409 || r.status === 422) return false; // the other device saved first: pull again
     if (r.status === 403) throw new Error("Mã đồng bộ chưa có quyền ghi (Contents: Read and write).");
     if (!r.ok) throw new Error(`GitHub báo lỗi ${r.status} khi lưu.`);
@@ -139,7 +159,7 @@
     if (!quiet) setStatus("busy");
     try {
       SE.saveSession();
-      const o = await owner();
+      const o = await home();
       for (let attempt = 0; attempt < 3; attempt++) {
         const remote = await pull(o);
         const { changed } = merge(remote.data);
@@ -192,9 +212,9 @@
     el.querySelector("span").textContent = text;
     $("syncStatus").textContent = mode === "error" ? "⚠ " + msg : text;
     $("syncStatus").className = "hint small" + (mode === "error" ? " sync-err" : "");
-    const o = SE.safeGet("syncOwner");
+    const o = SE.safeGet("syncHome");
     $("syncInfo").innerHTML = mode === "ok" && o
-      ? `✓ Đang đồng bộ với kho riêng tư <b>${SE.esc(o)}/${REPO}</b> · <a href="https://github.com/${encodeURIComponent(o)}/${REPO}/commits" target="_blank" rel="noopener">Lịch sử sao lưu ↗</a> · <button type="button" class="linkish" data-disconnect>Ngắt kết nối</button>`
+      ? `✓ Đang đồng bộ với kho riêng tư <b>${SE.esc(o)}</b> · <a href="https://github.com/${o.split("/").map(encodeURIComponent).join("/")}/commits" target="_blank" rel="noopener">Lịch sử sao lưu ↗</a> · <button type="button" class="linkish" data-disconnect>Ngắt kết nối</button>`
       : "";
     storageInfo();
   }
@@ -261,7 +281,7 @@
   }
 
   // ---------- Wire up ----------
-  window.SE_SYNC = { collect, merge, dirty, syncNow, gh, owner };
+  window.SE_SYNC = { collect, merge, dirty, syncNow, gh, owner, home };
   $("syncToken").value = token();
   // A pasted token is checked right away: shape first, then GitHub (who it belongs to, access to the repo).
   function useToken(v) {
@@ -273,6 +293,7 @@
     $("syncToken").value = v;
     SE.rawSet("syncToken", v);
     SE.rawSet("syncOwner", null);
+    SE.rawSet("syncHome", null);
     if (v) syncNow(); else setStatus("off");
   }
   $("syncNowBtn").onclick = () => useToken($("syncToken").value);
