@@ -740,6 +740,8 @@
         <div class="toolbar d-acts"><a class="btn" href="${esc(item.url)}" target="_blank" rel="noopener" data-open-link>↗ Mở bài gốc</a><button class="btn ghost danger" data-del>🗑 Xóa</button></div>
         ${item.text ? `<div class="read-all">
             <button class="btn primary" data-readall>🔊 Đọc cả bài (chậm)</button>
+            <button class="btn ${item.aiVoice ? "saved" : "ghost"}" data-aivoice title="GitHub đọc sẵn bài này bằng giọng AI (vài phút)">${item.aiVoice ? "✓ Giọng AI" : "🎙️ Làm giọng AI cho bài này"}</button>
+            <span class="ai-voice-state small muted" data-aivoicestate></span>
             <button class="btn" data-readpause hidden>⏸ Tạm dừng</button>
             <label>Tốc độ <select data-readrate>${[["0.65", "Rất chậm"], ["0.8", "Chậm"], ["1", "Bình thường"]].map(([v, l]) => `<option value="${v}" ${readPref("readRate", "0.8") === v ? "selected" : ""}>${l}</option>`).join("")}</select></label>
             <label>Nghỉ giữa câu <select data-readgap>${[["0", "Không"], ["1", "1 giây"], ["2", "2 giây"], ["3", "3 giây"]].map(([v, l]) => `<option value="${v}" ${readPref("readGap", "1") === v ? "selected" : ""}>${l}</option>`).join("")}</select></label>
@@ -1014,10 +1016,36 @@
     document.addEventListener("se:view", () => { if (R.on) stop(); }, { once: true });
   }
 
+  // 🎙️ Làm giọng AI cho bài này: GitHub reads the chosen article in the AI voice (cloudvoice.js), so it plays
+  // at once and offline. The state shows how many sentences are ready.
+  function wireArticleVoice(box, item) {
+    const btn = box.querySelector("[data-aivoice]"), state = box.querySelector("[data-aivoicestate]");
+    if (!btn) return;
+    const show = () => {
+      if (!state.isConnected) return document.removeEventListener("se:cloudvoice", show);
+      const a = getItem("article", item.id);
+      if (!a?.aiVoice) { state.textContent = ""; return; }
+      if (!SE.safeGet("syncToken")) { state.textContent = "Cần bật đồng bộ GitHub trong Cài đặt."; return; }
+      const cv = window.SE_CLOUDVOICE;
+      const { ready, total } = cv ? cv.progress(cv.sentencesOf(a.text)) : { ready: 0, total: 0 };
+      state.textContent = ready >= total ? `☁️ Đủ ${total} câu giọng AI` : `☁️ Giọng AI: ${ready}/${total} câu · GitHub đang làm tiếp (vài phút)`;
+    };
+    btn.onclick = () => {
+      const on = !getItem("article", item.id)?.aiVoice;
+      updateItem("article", item.id, { aiVoice: on });
+      btn.textContent = on ? "✓ Giọng AI" : "🎙️ Làm giọng AI cho bài này";
+      btn.className = "btn " + (on ? "saved" : "ghost");
+      toast(on ? "🎙️ GitHub sẽ đọc sẵn bài này bằng giọng AI, xong trong vài phút." : "Đã tắt giọng AI cho bài này.");
+      show();
+    };
+    document.addEventListener("se:cloudvoice", show);
+    show();
+  }
+
   function wireDetail(kind, item) {
     const box = $("detail-" + kind);
     if (box._read?.on) { box._read.on = false; box._read.token++; SE.stopAll(); } // a new article opened: stop the old one
-    if (kind === "article") wireReadAll(box);
+    if (kind === "article") { wireReadAll(box); wireArticleVoice(box, item); }
     box.querySelector("[data-open-link]")?.addEventListener("click", () => SE.track("open"));
     box.querySelector("[data-del]").onclick = () => {
       if (!confirm(`Xóa “${item.title}”?`)) return;

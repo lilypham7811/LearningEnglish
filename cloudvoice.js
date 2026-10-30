@@ -49,6 +49,8 @@
       for (const l of d.lines || []) add(l[0] === 0 ? "A" : "B", l[1]);
     }
     for (const s of SE.safeGet("speeches") || []) sentencesOf(s.text).forEach((t) => add("A", t));
+    // Articles only when chosen ("🎙️ Làm giọng AI cho bài này"): an article is long (40-80 sentences).
+    for (const a of SE.safeGet("articles") || []) if (a.aiVoice && a.text) sentencesOf(a.text).forEach((t) => add("A", t));
     return [...out.values()];
   }
 
@@ -237,5 +239,7 @@
   document.addEventListener("se:syncdone", () => { clearTimeout(soon); soon = setTimeout(() => { publish(); if (!C.treeTag) refresh(); }, 4000); });
   document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && token()) refresh(); });
 
-  window.SE_CLOUDVOICE = { has, play, stop, publish, refresh, statusText, voiceOf, wanted };
+  // How many of these sentences already have the AI voice (an article's "12/62 câu").
+  const progress = (texts) => ({ ready: texts.filter((t) => has(t, "A")).length, total: texts.length });
+  window.SE_CLOUDVOICE = { has, play, stop, publish, refresh, statusText, voiceOf, wanted, progress, sentencesOf };
 })();
