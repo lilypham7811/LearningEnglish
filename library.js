@@ -1350,12 +1350,13 @@
 
   // ---------- Items sent by the browser extension ----------
   // The extension opens the app as …/LearningEnglish/#add=<items>; older versions posted a message instead.
-  function receive(all) {
+  // quiet: items sent by someone else (📨 inbox, see sync.js): saved without opening them.
+  function receive(all, { quiet = false } = {}) {
     const words = all.filter((x) => x?.kind === "word");
     const items = all.filter((x) => x && x.kind !== "word");
     words.forEach((w) => window.SE_WORDS?.save(w));
-    (async () => {
-      for (let i = 0; i < items.length; i++) await addItem(items[i], { open: i === items.length - 1, undo: true });
+    return (async () => {
+      for (let i = 0; i < items.length; i++) await addItem(items[i], { open: !quiet && i === items.length - 1, undo: !quiet });
     })();
   }
   function takeFromAddress() {
@@ -1417,6 +1418,6 @@
     }
     if (!$("view-article").hidden) render("article");
   }
-  window.SE_LIB = { gemini, toast, applyArticleTexts };
+  window.SE_LIB = { gemini, toast, applyArticleTexts, receive };
   updateNav();
 })();

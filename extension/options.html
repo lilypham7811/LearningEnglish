@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Gửi bài cho người khác · LearningEnglish</title>
+  <style>
+    :root { color-scheme: light dark; --ink: #10313f; --muted: #5b6b70; --line: #d9e1dc; --bg: #f6f8f5; --card: #fff; --accent: #1f3b2d; --ok: #2d6a4d; --bad: #b23a28; }
+    @media (prefers-color-scheme: dark) { :root { --ink: #e8efe9; --muted: #a7b5ad; --line: #2f3b35; --bg: #141a17; --card: #1c2420; --accent: #8fd1a9; --ok: #8fd1a9; --bad: #ff9b88; } }
+    body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.5 "Segoe UI", system-ui, sans-serif; }
+    main { max-width: 640px; margin: 0 auto; padding: 32px 16px; }
+    h1 { font-size: 22px; margin: 0 0 6px; }
+    p { margin: 0 0 14px; color: var(--muted); }
+    .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 18px; margin-top: 18px; }
+    label { display: block; font-weight: 600; margin: 10px 0 4px; }
+    input { width: 100%; box-sizing: border-box; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; font: inherit; background: transparent; color: inherit; }
+    button { margin-top: 14px; padding: 10px 18px; border-radius: 10px; border: 0; background: var(--accent); color: var(--card); font: inherit; font-weight: 700; cursor: pointer; }
+    button.ghost { background: transparent; color: var(--bad); border: 1px solid var(--line); margin: 0; padding: 6px 12px; font-weight: 600; }
+    .msg { margin-top: 10px; font-weight: 600; }
+    .msg.ok { color: var(--ok); } .msg.bad { color: var(--bad); }
+    ul { list-style: none; padding: 0; margin: 0; }
+    li { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--line); }
+    li:last-child { border-bottom: 0; }
+    small { color: var(--muted); }
+  </style>
+</head>
+<body>
+<main>
+  <h1>📨 Gửi bài cho người khác</h1>
+  <p>Thêm người nhận một lần (ví dụ chồng bạn). Sau đó bấm chuột phải trên bài báo, video hay một từ → <b>📨 Gửi … cho Hoan</b>: bài đi thẳng vào app của người đó, không lẫn với app của bạn.</p>
+
+  <div class="card">
+    <h2 style="margin:0;font-size:17px">Người nhận</h2>
+    <ul id="list"></ul>
+    <p id="none" style="margin:8px 0 0">Chưa có ai.</p>
+  </div>
+
+  <form class="card" id="add" autocomplete="off">
+    <h2 style="margin:0;font-size:17px">Thêm người nhận</h2>
+    <label for="name">Tên hiện trong menu chuột phải</label>
+    <input id="name" placeholder="Hoan" required maxlength="20" />
+    <label for="token">Mã đồng bộ GitHub của người đó (bắt đầu bằng github_pat_)</label>
+    <input id="token" type="password" placeholder="github_pat_…" required />
+    <button>Kiểm tra và thêm</button>
+    <div class="msg" id="msg" role="status"></div>
+    <p style="margin:12px 0 0"><small>🔒 Mã chỉ lưu trong Chrome trên máy này. Mã đó chỉ mở được kho học tiếng Anh của người nhận.</small></p>
+  </form>
+</main>
+<script src="options.js"></script>
+</body>
+</html>

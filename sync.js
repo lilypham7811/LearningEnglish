@@ -150,6 +150,32 @@
     return true;
   }
 
+  // 📨 Things someone sent to this learner from their Chrome ("Gửi … cho <name>", extension/background.js):
+  // small files in inbox/ of this repo. Added to this app's lists, then deleted. Checked at most once a minute.
+  let inboxAt = 0, inboxTag = null;
+  async function checkInbox(o) {
+    if (Date.now() - inboxAt < 60000 || !window.SE_LIB?.receive) return;
+    inboxAt = Date.now();
+    const r = await gh(`/repos/${o}/contents/inbox`, inboxTag ? { headers: { "If-None-Match": inboxTag } } : {});
+    if (!r.ok) return; // 304: nothing new; 404: no inbox yet
+    inboxTag = r.headers.get("ETag");
+    const files = (await r.json()).filter((f) => f.type === "file" && f.name.endsWith(".json"));
+    let got = 0;
+    for (const f of files) {
+      try {
+        const raw = await gh(`/repos/${o}/contents/${f.path}`, { headers: { Accept: "application/vnd.github.raw+json" } });
+        if (!raw.ok) continue;
+        const items = (await raw.json()).items;
+        if (Array.isArray(items)) { await window.SE_LIB.receive(items, { quiet: true }); got += items.length; }
+        // Delete it; another device of this learner may have taken it first (then this fails, which is fine:
+        // words and links that are already saved are not saved twice).
+        await gh(`/repos/${o}/contents/${f.path}`, { method: "DELETE", body: JSON.stringify({ message: "📨 received", sha: f.sha }) });
+      } catch { /* try again next time */ }
+    }
+    if (files.length) inboxTag = null;
+    if (got) window.SE_LIB.toast(`📨 Có ${got} mục mới được gửi tới bạn`);
+  }
+
   // quiet: background check (no "Đang đồng bộ…" flicker, and the practice log alone isn't pushed more than once a minute).
   async function syncNow({ quiet = false } = {}) {
     if (!token()) return setStatus("off");
@@ -178,6 +204,7 @@
       }
       SE.rawSet("syncLast", Date.now());
       setStatus("ok");
+      checkInbox(o).catch(() => {});
       document.dispatchEvent(new Event("se:syncdone")); // cloudvoice.js: list new sentences for the AI voice
     } catch (err) {
       setStatus("error", err.message || "Không kết nối được. Kiểm tra Internet.");

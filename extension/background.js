@@ -4,13 +4,36 @@
 const APP = "https://lilypham7811.github.io/LearningEnglish/";
 const APP_URLS = [APP + "*"];
 
-chrome.runtime.onInstalled.addListener(() => {
+// The menu: "Save … to LearningEnglish" (your app), and for each person added in the options page
+// ("📨 Gửi bài cho người khác") "📨 Gửi … cho <name>": straight into that person's app (their GitHub inbox).
+async function buildMenus() {
+  const { recipients = [] } = await chrome.storage.local.get("recipients");
+  await chrome.contextMenus.removeAll();
   chrome.contextMenus.create({ id: "save-page", title: "Save this page to LearningEnglish", contexts: ["page", "video"] });
   chrome.contextMenus.create({ id: "save-link", title: "Save link to LearningEnglish", contexts: ["link"] });
   chrome.contextMenus.create({ id: "save-word", title: "Save word “%s” to LearningEnglish", contexts: ["selection"] });
-});
+  recipients.forEach((r, i) => {
+    chrome.contextMenus.create({ id: `send:${i}:page`, title: `📨 Gửi trang này cho ${r.name}`, contexts: ["page", "video"] });
+    chrome.contextMenus.create({ id: `send:${i}:link`, title: `📨 Gửi link cho ${r.name}`, contexts: ["link"] });
+    chrome.contextMenus.create({ id: `send:${i}:word`, title: `📨 Gửi từ “%s” cho ${r.name}`, contexts: ["selection"] });
+  });
+  chrome.contextMenus.create({ id: "options", title: "📨 Thêm người nhận…", contexts: ["action"] });
+}
+chrome.runtime.onInstalled.addListener(buildMenus);
+chrome.runtime.onStartup.addListener(buildMenus);
+chrome.storage.onChanged.addListener((c) => { if (c.recipients) buildMenus(); });
 
-chrome.contextMenus.onClicked.addListener((info, tab) => {
+chrome.contextMenus.onClicked.addListener(async (info, tab) => {
+  if (info.menuItemId === "options") return chrome.runtime.openOptionsPage();
+  const [kind, i, what] = String(info.menuItemId).split(":");
+  if (kind === "send") {
+    const { recipients = [] } = await chrome.storage.local.get("recipients");
+    const r = recipients[+i];
+    if (!r) return;
+    const item = what === "word" ? await wordItem(tab, info) : await pageItem(tab, what === "link" ? info.linkUrl : null, info.selectionText);
+    if (!item) return refuse(tab);
+    return sendTo(r, item, tab);
+  }
   if (info.menuItemId === "save-word") return saveWord(tab, info);
   save(tab, info.menuItemId === "save-link" ? info.linkUrl : null, info.selectionText);
 });
@@ -18,6 +41,9 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
 // A selected word (YouTube or eJOY subtitles, an article…) goes to the app's word list,
 // with its sentence and, for videos, a link back to that second.
 async function saveWord(tab, info) {
+  await queue(await wordItem(tab, info), tab);
+}
+async function wordItem(tab, info) {
   let found = {};
   try {
     const [{ result }] = await chrome.scripting.executeScript({ target: { tabId: tab.id, frameIds: [info.frameId || 0] }, func: grabWord });
@@ -26,7 +52,7 @@ async function saveWord(tab, info) {
   const url = found.url || info.frameUrl || info.pageUrl || "";
   const id = (url.match(/(?:v=|embed\/|shorts\/|youtu\.be\/)([\w-]{11})/) || [])[1];
   const t = found.time != null ? Math.floor(found.time) : null;
-  await queue({
+  return {
     kind: "word",
     word: info.selectionText.trim().slice(0, 60),
     context: found.context || "",
@@ -34,7 +60,7 @@ async function saveWord(tab, info) {
     sourceTitle: found.title || tab.title || "",
     sourceUrl: id ? `https://www.youtube.com/watch?v=${id}${t != null ? `&t=${t}s` : ""}` : url,
     time: t,
-  }, tab);
+  };
 }
 function grabWord() {
   const sel = getSelection();
@@ -74,11 +100,40 @@ function refuse(tab) {
 }
 
 async function save(tab, linkUrl, selection) {
-  if (!linkUrl && notSavable(tab)) return refuse(tab);
+  const item = await pageItem(tab, linkUrl, selection);
+  if (!item) return refuse(tab);
+  await queue(item, tab);
+}
+async function pageItem(tab, linkUrl, selection) {
+  if (!linkUrl && notSavable(tab)) return null;
   let item = linkUrl ? { url: linkUrl } : await capture(tab);
   // A long selection is the article text the user wants (useful on messy pages).
   if (!linkUrl && selection && selection.length > 300) item = { ...item, text: selection };
-  await queue(item, tab);
+  return item;
+}
+
+// 📨 Into the other person's GitHub repo, as one small file in inbox/. Their app reads the inbox when it
+// syncs, adds the items to their own lists and empties it. Their data never touches yours.
+async function sendTo(r, item, tab) {
+  const json = JSON.stringify({ at: Date.now(), items: [item] });
+  const bytes = new TextEncoder().encode(json);
+  let bin = "";
+  for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+  const path = `inbox/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.json`;
+  let ok = false;
+  try {
+    const res = await fetch(`https://api.github.com/repos/${r.home}/contents/${path}`, {
+      method: "PUT",
+      headers: { Authorization: "Bearer " + r.token, Accept: "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28" },
+      body: JSON.stringify({ message: `📨 ${item.kind === "word" ? item.word : item.title || item.url}`, content: btoa(bin) }),
+    });
+    ok = res.ok;
+  } catch { ok = false; }
+  if (!tab?.id) return;
+  chrome.action.setBadgeBackgroundColor({ color: ok ? "#6B3FD1" : "#B23A28", tabId: tab.id });
+  chrome.action.setBadgeText({ text: ok ? "✓" : "!", tabId: tab.id });
+  chrome.action.setTitle({ title: ok ? `Đã gửi cho ${r.name}` : `Chưa gửi được cho ${r.name}: kiểm tra mạng hoặc mã trong phần Thêm người nhận`, tabId: tab.id });
+  setTimeout(() => chrome.action.setBadgeText({ text: "", tabId: tab.id }), 3000);
 }
 
 async function queue(item, tab) {
