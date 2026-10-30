@@ -743,10 +743,11 @@
             <button class="btn" data-readpause hidden>⏸ Tạm dừng</button>
             <label>Tốc độ <select data-readrate>${[["0.65", "Rất chậm"], ["0.8", "Chậm"], ["1", "Bình thường"]].map(([v, l]) => `<option value="${v}" ${readPref("readRate", "0.8") === v ? "selected" : ""}>${l}</option>`).join("")}</select></label>
             <label>Nghỉ giữa câu <select data-readgap>${[["0", "Không"], ["1", "1 giây"], ["2", "2 giây"], ["3", "3 giây"]].map(([v, l]) => `<option value="${v}" ${readPref("readGap", "1") === v ? "selected" : ""}>${l}</option>`).join("")}</select></label>
+            <label class="read-loop"><input type="checkbox" data-readloop ${readPref("readLoop", "0") === "1" ? "checked" : ""} /> 🔁 Lặp lại cả bài</label>
             <span class="read-pos" data-readpos></span>
           </div>` : ""}
         ${item.text
-          ? `<p class="hint small">💡 Chạm vào một từ để lưu, nghe từ hoặc nghe cả câu. Đang đọc cả bài thì chạm vào câu khác để đọc tiếp từ câu đó.</p><div class="reader-text">${paragraphs(item.text)}</div>`
+          ? `<p class="hint small">💡 Chạm vào một từ để lưu, nghe từ hoặc nghe cả câu. Đang đọc cả bài thì chạm vào câu khác để đọc tiếp từ câu đó. Bấm 🔁 ở đầu một đoạn để nghe đoạn đó lặp đi lặp lại.</p><div class="reader-text">${paragraphs(item.text)}</div>`
           : `<div class="status warn">Chưa có nội dung bài. Bấm một gợi ý ✨ bên Google AI để AI tự đọc bài từ link, hoặc dán nội dung vào đây:</div>
              <textarea class="input" rows="6" data-paste placeholder="Dán nội dung bài báo…"></textarea><div class="toolbar"><button class="btn primary" data-save-text>Lưu nội dung</button></div>`}
       </div></div>`;
@@ -908,14 +909,31 @@
   }
 
   // ---------- Bài báo: read the whole article aloud, slowly, sentence by sentence ----------
+  // Or one paragraph over and over (🔁 at its start), or the whole article over and over ("Lặp lại cả bài").
   const readPref = (k, d) => { try { return localStorage.getItem("se_" + k) ?? d; } catch { return d; } };
   const setReadPref = (k, v) => { try { localStorage.setItem("se_" + k, v); } catch { /* private mode */ } };
   function wireReadAll(box) {
     const btn = box.querySelector("[data-readall]");
     if (!btn) return;
     const pauseBtn = box.querySelector("[data-readpause]"), pos = box.querySelector("[data-readpos]");
-    const R = (box._read = { on: false, paused: false, token: 0, idx: 0, lock: null });
+    const R = (box._read = { on: false, paused: false, token: 0, idx: 0, lock: null, range: null, para: -1, round: 1 });
     const sents = () => [...box.querySelectorAll(".reader-text .sent")];
+    const paras = () => [...box.querySelectorAll(".reader-text p")].filter((p) => p.querySelector(".sent"));
+    // 🔁 at the start of each paragraph: read this paragraph again and again.
+    paras().forEach((p, i) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "para-loop";
+      b.title = "Đọc đi đọc lại đoạn này";
+      b.setAttribute("aria-label", `Đọc lặp lại đoạn ${i + 1}`);
+      b.textContent = "🔁";
+      b.onclick = (e) => { e.stopPropagation(); loopPara(i); };
+      p.prepend(b);
+    });
+    const markPara = () => paras().forEach((p, i) => {
+      p.classList.toggle("looping", R.on && i === R.para);
+      p.querySelector(".para-loop")?.setAttribute("aria-pressed", R.on && i === R.para);
+    });
     const alive = (t) => t === R.token && R.on && btn.isConnected;
     const sleep = (ms, t) => new Promise((res) => { const t0 = Date.now(); const tick = () => (!alive(t) ? res() : R.paused || Date.now() - t0 < ms ? setTimeout(tick, 100) : res()); tick(); });
     const show = () => {
@@ -923,11 +941,24 @@
       pauseBtn.hidden = !R.on;
       pauseBtn.textContent = R.paused ? "▶ Tiếp tục" : "⏸ Tạm dừng";
       const n = sents().length;
-      pos.textContent = R.on ? `Câu ${Math.min(R.idx + 1, n)}/${n}${R.paused ? " · đã tạm dừng" : ""}` : "";
+      const where = R.range ? `🔁 Đoạn ${R.para + 1} · lần ${R.round} · câu ${Math.min(R.idx - R.range[0] + 1, R.range[1] - R.range[0])}/${R.range[1] - R.range[0]}`
+        : `Câu ${Math.min(R.idx + 1, n)}/${n}${R.loopAll ? ` · lần ${R.round}` : ""}`;
+      pos.textContent = R.on ? `${where}${R.paused ? " · đã tạm dừng" : ""}` : "";
+      markPara();
     };
     async function run(t) {
       const list = sents();
-      while (alive(t) && R.idx < list.length) {
+      while (alive(t)) {
+        const end = R.range ? R.range[1] : list.length;
+        if (R.idx >= end) {
+          if (!R.range && !R.loopAll) break;
+          // Once more from the start of the paragraph (or the article), after a short rest.
+          R.round++;
+          R.idx = R.range ? R.range[0] : 0;
+          show();
+          await sleep(2000, t);
+          continue;
+        }
         await sleep(0, t);
         if (!alive(t)) return;
         const s = list[R.idx];
@@ -944,21 +975,42 @@
       if (alive(t)) { stop(); toast("🔊 Đã đọc hết bài."); }
     }
     function restart() { SE.stopAll(); R.paused = false; const t = ++R.token; run(t); }
-    async function start() {
-      Object.assign(R, { on: true, paused: false, idx: Math.max(0, sents().findIndex((x) => x.classList.contains("on"))) });
+    async function begin() {
+      if (R.on) return;
+      Object.assign(R, { on: true, paused: false });
       try { R.lock = await navigator.wakeLock?.request("screen"); } catch { R.lock = null; }
-      SE.track("listen"); restart();
+      SE.track("listen");
+    }
+    async function start() {
+      Object.assign(R, { range: null, para: -1, round: 1, idx: Math.max(0, sents().findIndex((x) => x.classList.contains("on"))) });
+      await begin();
+      restart();
+    }
+    // One paragraph, again and again; its 🔁 again stops it.
+    async function loopPara(i) {
+      if (R.on && R.para === i) return stop();
+      const list = sents(), own = [...paras()[i].querySelectorAll(".sent")];
+      Object.assign(R, { range: [list.indexOf(own[0]), list.indexOf(own[own.length - 1]) + 1], para: i, round: 1 });
+      R.idx = R.range[0];
+      await begin();
+      restart();
     }
     function stop() {
-      R.on = false; R.paused = false; R.token++; SE.stopAll();
+      R.on = false; R.paused = false; R.token++; R.range = null; R.para = -1; SE.stopAll();
       try { R.lock?.release(); } catch { /* already released */ }
       R.lock = null; sents().forEach((x) => x.classList.remove("on")); show();
     }
-    R.jump = (s) => { R.idx = Math.max(0, sents().indexOf(s)); restart(); };
+    R.jump = (s) => {
+      R.idx = Math.max(0, sents().indexOf(s));
+      if (R.range && (R.idx < R.range[0] || R.idx >= R.range[1])) { R.range = null; R.para = -1; } // left the paragraph
+      restart();
+    };
     btn.onclick = () => (R.on ? stop() : start());
     pauseBtn.onclick = () => { R.paused = !R.paused; if (R.paused) SE.stopAll(); show(); };
     box.querySelector("[data-readrate]").onchange = (e) => setReadPref("readRate", e.target.value);
     box.querySelector("[data-readgap]").onchange = (e) => setReadPref("readGap", e.target.value);
+    R.loopAll = readPref("readLoop", "0") === "1";
+    box.querySelector("[data-readloop]").onchange = (e) => { R.loopAll = e.target.checked; setReadPref("readLoop", R.loopAll ? "1" : "0"); show(); };
     document.addEventListener("se:view", () => { if (R.on) stop(); }, { once: true });
   }
 

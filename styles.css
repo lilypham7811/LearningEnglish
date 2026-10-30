@@ -772,3 +772,12 @@ h2 { font-weight: 800; letter-spacing: -0.02em; }
 .read-all select { min-height: 2.1rem; border: 1px solid var(--line); border-radius: .45rem; background: var(--surface); padding: 0 .4rem; font: inherit; color: var(--ink); }
 .read-pos { font-size: .85rem; font-weight: 600; color: var(--r5); }
 .reader-text .sent.on { background: color-mix(in srgb, var(--r5) 16%, transparent); border-radius: .3rem; box-shadow: 0 0 0 2px color-mix(in srgb, var(--r5) 16%, transparent); }
+
+/* Bài báo: 🔁 one paragraph again and again */
+.para-loop { display: inline-grid; place-items: center; width: 1.8rem; height: 1.8rem; margin: 0 .4rem 0 0; vertical-align: .1rem; border-radius: 50%;
+  border: 1px solid var(--line); background: var(--surface); font-size: .85rem; cursor: pointer; opacity: .55; transition: opacity .12s, background .12s; }
+.para-loop:hover, .para-loop[aria-pressed="true"] { opacity: 1; }
+.para-loop[aria-pressed="true"] { background: var(--leaf-soft); border-color: var(--leaf); }
+.reader-text p.looping { background: var(--leaf-tint); box-shadow: -.6rem 0 0 var(--leaf-tint), .6rem 0 0 var(--leaf-tint); border-radius: .3rem; }
+.read-loop { display: inline-flex; align-items: center; gap: .3rem; }
+@media (hover: none) { .para-loop { opacity: .8; } }
