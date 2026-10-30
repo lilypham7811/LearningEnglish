@@ -745,11 +745,11 @@
             <button class="btn" data-readpause hidden>⏸ Tạm dừng</button>
             <label>Tốc độ <select data-readrate>${[["0.65", "Rất chậm"], ["0.8", "Chậm"], ["1", "Bình thường"]].map(([v, l]) => `<option value="${v}" ${readPref("readRate", "0.8") === v ? "selected" : ""}>${l}</option>`).join("")}</select></label>
             <label>Nghỉ giữa câu <select data-readgap>${[["0", "Không"], ["1", "1 giây"], ["2", "2 giây"], ["3", "3 giây"]].map(([v, l]) => `<option value="${v}" ${readPref("readGap", "1") === v ? "selected" : ""}>${l}</option>`).join("")}</select></label>
-            <label class="read-loop"><input type="checkbox" data-readloop ${readPref("readLoop", "0") === "1" ? "checked" : ""} /> 🔁 Lặp lại cả bài</label>
+            <label class="read-loop" title="Nghe lại nhiều lần, không cần bấm (khi lái xe)">🔁 Nghe <select data-readrepeat>${[["1", "1 lần"], ["3", "3 lần"], ["5", "5 lần"], ["10", "10 lần"], ["0", "Không ngừng"]].map(([v, l]) => `<option value="${v}" ${readPref("listenRepeat", "1") === v ? "selected" : ""}>${l}</option>`).join("")}</select></label>
             <span class="read-pos" data-readpos></span>
           </div>` : ""}
         ${item.text
-          ? `<p class="hint small">💡 Chạm vào một từ để lưu, nghe từ hoặc nghe cả câu. Đang đọc cả bài thì chạm vào câu khác để đọc tiếp từ câu đó. Bấm 🔁 ở đầu một đoạn để nghe đoạn đó lặp đi lặp lại.</p><div class="reader-text">${paragraphs(item.text)}</div>`
+          ? `<div class="reader-text">${paragraphs(item.text)}</div>`
           : `<div class="status warn">Chưa có nội dung bài. Bấm một gợi ý ✨ bên Google AI để AI tự đọc bài từ link, hoặc dán nội dung vào đây:</div>
              <textarea class="input" rows="6" data-paste placeholder="Dán nội dung bài báo…"></textarea><div class="toolbar"><button class="btn primary" data-save-text>Lưu nội dung</button></div>`}
       </div></div>`;
@@ -944,7 +944,7 @@
       pauseBtn.textContent = R.paused ? "▶ Tiếp tục" : "⏸ Tạm dừng";
       const n = sents().length;
       const where = R.range ? `🔁 Đoạn ${R.para + 1} · lần ${R.round} · câu ${Math.min(R.idx - R.range[0] + 1, R.range[1] - R.range[0])}/${R.range[1] - R.range[0]}`
-        : `Câu ${Math.min(R.idx + 1, n)}/${n}${R.loopAll ? ` · lần ${R.round}` : ""}`;
+        : `Câu ${Math.min(R.idx + 1, n)}/${n}${R.repeat !== 1 ? ` · lần ${R.round}/${R.repeat || "∞"}` : ""}`;
       pos.textContent = R.on ? `${where}${R.paused ? " · đã tạm dừng" : ""}` : "";
       markPara();
     };
@@ -953,7 +953,9 @@
       while (alive(t)) {
         const end = R.range ? R.range[1] : list.length;
         if (R.idx >= end) {
-          if (!R.range && !R.loopAll) break;
+          // How many rounds: as chosen in 🔁 Nghe; a paragraph set to "1 lần" still repeats until stopped.
+          const times = R.range && R.repeat === 1 ? 0 : R.repeat;
+          if (times !== 0 && R.round >= times) break;
           // Once more from the start of the paragraph (or the article), after a short rest.
           R.round++;
           R.idx = R.range ? R.range[0] : 0;
@@ -1011,8 +1013,8 @@
     pauseBtn.onclick = () => { R.paused = !R.paused; if (R.paused) SE.stopAll(); show(); };
     box.querySelector("[data-readrate]").onchange = (e) => setReadPref("readRate", e.target.value);
     box.querySelector("[data-readgap]").onchange = (e) => setReadPref("readGap", e.target.value);
-    R.loopAll = readPref("readLoop", "0") === "1";
-    box.querySelector("[data-readloop]").onchange = (e) => { R.loopAll = e.target.checked; setReadPref("readLoop", R.loopAll ? "1" : "0"); show(); };
+    R.repeat = +readPref("listenRepeat", "1");
+    box.querySelector("[data-readrepeat]").onchange = (e) => { R.repeat = +e.target.value; setReadPref("listenRepeat", e.target.value); show(); };
     document.addEventListener("se:view", () => { if (R.on) stop(); }, { once: true });
   }
 

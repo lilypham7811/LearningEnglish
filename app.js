@@ -246,13 +246,30 @@
     return token === state.playToken;
   }
 
+  // ▶ Nghe cả bài, as many times as chosen in 🔁 (1, 3, 5, 10 or without end: hands-free, e.g. driving),
+  // 2 seconds between rounds; the screen stays on meanwhile so the phone doesn't stop the sound.
+  const repeatPref = () => { try { return localStorage.getItem("se_listenRepeat") || "1"; } catch { return "1"; } };
   async function playAll() {
     track("listen");
     const token = ++state.playToken;
-    for (let i = 0; i < state.dialog.lines.length; i++) {
-      if (!(await playLine(i, state.rate, token))) return;
-      await wait(350);
-      if (token !== state.playToken) return;
+    const times = +repeatPref(), btn = $("playAllBtn");
+    let lock = null;
+    try { lock = await navigator.wakeLock?.request("screen"); } catch { /* not allowed */ }
+    try {
+      for (let round = 1; times === 0 || round <= times; round++) {
+        if (times !== 1) btn.textContent = `▶ Nghe cả bài · lần ${round}/${times || "∞"}`;
+        for (let i = 0; i < state.dialog.lines.length; i++) {
+          if (!(await playLine(i, state.rate, token))) return;
+          await wait(350);
+          if (token !== state.playToken) return;
+        }
+        if (times !== 0 && round >= times) break;
+        await wait(2000);
+        if (token !== state.playToken) return;
+      }
+    } finally {
+      btn.textContent = "▶ Nghe cả bài";
+      try { lock?.release(); } catch { /* already released */ }
     }
   }
 
@@ -1673,6 +1690,8 @@ Name2: English sentence | Vietnamese translation`;
 
     $("topicForm").onsubmit = onSubmit;
     $("playAllBtn").onclick = playAll;
+    $("repeatSel").value = repeatPref();
+    $("repeatSel").onchange = (e) => { try { localStorage.setItem("se_listenRepeat", e.target.value); } catch { /* private mode */ } };
     $("stopBtn").onclick = stopAll;
     $("roleplayBtn").onclick = openRoleplay;
     $("saveBtn").onclick = toggleSave;
