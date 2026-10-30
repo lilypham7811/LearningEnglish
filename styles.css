@@ -781,3 +781,14 @@ h2 { font-weight: 800; letter-spacing: -0.02em; }
 .reader-text p.looping { background: var(--leaf-tint); box-shadow: -.6rem 0 0 var(--leaf-tint), .6rem 0 0 var(--leaf-tint); border-radius: .3rem; }
 .read-loop { display: inline-flex; align-items: center; gap: .3rem; }
 @media (hover: none) { .para-loop { opacity: .8; } }
+
+/* Motto when the app opens: "Be addicted to tiny achievements every single day." */
+.motto { position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; padding: 24px 16px;
+  background: color-mix(in srgb, #12261C 82%, transparent); backdrop-filter: blur(6px); cursor: pointer; animation: motto-in .35s ease-out both; }
+.motto.out { animation: motto-out .35s ease-in both; }
+.motto-card { max-width: 34rem; text-align: center; color: #F4F1E6; }
+.motto-text { margin: 0; font-family: var(--f-display); font-weight: 800; font-size: clamp(1.7rem, 6vw, 2.6rem); line-height: 1.2; letter-spacing: -0.02em; }
+.motto-wins { margin: 1.1rem 0 0; font-size: 1rem; color: #C9E4B4; }
+@keyframes motto-in { from { opacity: 0; transform: scale(.98); } to { opacity: 1; transform: none; } }
+@keyframes motto-out { to { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .motto, .motto.out { animation: none; } }

@@ -1814,6 +1814,38 @@ Name2: English sentence | Vietnamese translation`;
     clearAppCaches().then(() => location.replace(location.pathname));
   }
   document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") checkForUpdate(); });
+
+  // ---------- Motto ----------
+  // "Be addicted to tiny achievements every single day." for a few seconds when the app opens, and when it
+  // comes back after 10 minutes or more, with today's tiny achievements so far. A tap closes it.
+  const MOTTO = "Be addicted to tiny achievements every single day.";
+  function todayWins() {
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    const from = d.getTime();
+    const mins = Math.round(getLog().filter((x) => x.start >= from).reduce((a, x) => a + (x.seconds || 0), 0) / 60);
+    const words = safeGet("words") || [];
+    const reviewed = words.filter((w) => w.lastReview >= from).length, saved = words.filter((w) => w.savedAt >= from).length;
+    const wins = [mins && `${mins} phút luyện tập`, reviewed && `${reviewed} từ đã ôn`, saved && `${saved} từ mới`].filter(Boolean);
+    return wins.length ? `Hôm nay: ${wins.join(" · ")} ✓` : "Hôm nay: bắt đầu bằng một việc nhỏ thôi: 1 từ, 1 câu, 1 phút.";
+  }
+  function showMotto() {
+    if (document.querySelector(".motto")) return;
+    const el = document.createElement("div");
+    el.className = "motto";
+    el.setAttribute("role", "status");
+    el.innerHTML = `<div class="motto-card"><p class="motto-text">${esc(MOTTO)}</p><p class="motto-wins">${esc(todayWins())}</p></div>`;
+    document.body.append(el);
+    const close = () => { el.classList.add("out"); setTimeout(() => el.remove(), 350); };
+    el.onclick = close;
+    setTimeout(close, 3800);
+  }
+  let hiddenAt = 0;
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden") hiddenAt = Date.now();
+    else if (hiddenAt && Date.now() - hiddenAt >= 10 * 60000) showMotto();
+  });
+  showMotto();
   setInterval(checkForUpdate, 30 * 60000);
   setTimeout(checkForUpdate, 3000);
 })();
