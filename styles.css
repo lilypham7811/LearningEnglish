@@ -800,3 +800,11 @@ h2 { font-weight: 800; letter-spacing: -0.02em; }
 /* Whose app: "👤 chong" under the name, when one GitHub account holds several learners */
 .learner { display: inline-block; margin-top: .2rem; padding: .05rem .55rem; border-radius: 99px; font-size: .78rem; font-weight: 700;
   background: var(--r2); color: #fff; letter-spacing: .01em; }
+
+/* 🗑 on a lesson; hidden built-in lessons */
+.ls-del { flex: none; border: 0; background: none; cursor: pointer; font-size: .95rem; padding: .3rem; border-radius: .4rem; opacity: .35; transition: opacity .12s, background .12s; }
+.lesson:hover .ls-del, .ls-del:focus-visible { opacity: .9; }
+.ls-del:hover { background: var(--bad-soft); }
+@media (hover: none) { .ls-del { opacity: .6; } }
+.lesson.is-hidden { opacity: .55; }
+.hidden-note { margin: 0; padding: .8rem 1rem; text-align: center; font-size: .9rem; }

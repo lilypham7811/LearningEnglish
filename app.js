@@ -722,6 +722,28 @@ Name2: English sentence | Vietnamese translation`;
     renderTopics();
     updateSaveBtn();
   }
+  // 🗑 on a lesson: one of mine (AI-written or pasted) is deleted; a built-in one is hidden (list "hidden",
+  // ids "hide:<dialog id>"), and "Hiện bài đã ẩn" at the bottom of the list brings it back.
+  const hiddenIds = () => new Set((safeGet("hidden") || []).map((x) => x.id));
+  function setHidden(id, on) {
+    const key = "hide:" + id, list = (safeGet("hidden") || []).filter((x) => x.id !== key);
+    safeSet("hidden", on ? [{ id: key, savedAt: Date.now() }, ...list] : list);
+  }
+  function deleteLesson(id) {
+    const mine = getSaved().find((x) => x.id === id);
+    const lib = window.DIALOGS.find((x) => x.id === id);
+    const title = (mine || lib)?.titleVi || (mine || lib)?.title || "bài này";
+    if (mine && !lib) {
+      if (!confirm(`Xoá hẳn bài “${title}”? Bài này do bạn tạo, xoá rồi không lấy lại được.`)) return;
+      safeSet("saved", getSaved().filter((x) => x.id !== id));
+      window.SE_LIB?.toast(`🗑 Đã xoá “${title}”.`);
+    } else {
+      if (mine) safeSet("saved", getSaved().filter((x) => x.id !== id)); // a saved copy of a built-in lesson
+      setHidden(id, true);
+      window.SE_LIB?.toast(`Đã ẩn “${title}”.`, { label: "Hoàn tác", run: () => { setHidden(id, false); renderSaved(); } });
+    }
+    renderSaved();
+  }
   function allDialogs() {
     const mine = getSaved().map((d) => ({ ...d, mine: true }));
     const lib = window.DIALOGS.filter((d) => !mine.some((m) => m.id === d.id));
@@ -730,7 +752,9 @@ Name2: English sentence | Vietnamese translation`;
       .sort((a, b) => a.rank - b.rank || a.at - b.at);
   }
   function renderTopics() {
-    const all = allDialogs(), done = doneIds();
+    const hid = hiddenIds(), everything = allDialogs(), done = doneIds();
+    const isHidden = (d) => hid.has("hide:" + d.id);
+    const all = tableUi.showHidden ? everything : everything.filter((d) => !isHidden(d));
     const isDone = (d) => done.has("done:" + d.id);
     // Level buttons: lessons done / lessons at that level.
     $("topicFilter").querySelectorAll("button[data-f]").forEach((b) => {
@@ -751,19 +775,26 @@ Name2: English sentence | Vietnamese translation`;
       return `<section class="unit" style="--cc:${color}">
         <header class="unit-head"><span class="unit-ic" aria-hidden="true">${emoji}</span><b>${esc(name)}</b>
           <span class="unit-prog">${n}/${items.length} đã học</span><span class="unit-bar" aria-hidden="true"><i style="width:${(n / items.length) * 100}%"></i></span></header>
-        <ol class="lessons">${items.map((d, i) => `<li class="lesson${isDone(d) ? " done" : ""}${state.dialog?.id === d.id ? " on" : ""}" data-id="${esc(d.id)}" tabindex="0">
+        <ol class="lessons">${items.map((d, i) => `<li class="lesson${isDone(d) ? " done" : ""}${isHidden(d) ? " is-hidden" : ""}${state.dialog?.id === d.id ? " on" : ""}" data-id="${esc(d.id)}" tabindex="0">
           <span class="ls-n">${i + 1}</span><span class="dt-emoji" aria-hidden="true">${d.emoji || "💬"}</span>
           <span class="dt-names"><b>${esc(d.titleVi || d.title)}</b>${d.titleVi ? `<small>${esc(d.title)}</small>` : ""}</span>
           <span class="dt-tags">${q || topicFilter === "saved" ? `<span class="lvl lvl-${d.level.toLowerCase()}" title="${LEVEL_VI[d.level] || ""}">${LEVEL_SHORT[d.level]}</span>` : ""}${d.mine ? `<span class="chip ai">★ Của tôi</span>` : ""}${d.at > fresh ? `<span class="chip new">Mới</span>` : ""}</span>
-          <label class="ls-done" title="Đánh dấu bài này đã học"><input type="checkbox" data-done ${isDone(d) ? "checked" : ""} /><span>Đã học</span></label></li>`).join("")}</ol>
+          ${isHidden(d) ? `<button type="button" class="btn small" data-unhide>Hiện lại</button>`
+            : `<label class="ls-done" title="Đánh dấu bài này đã học"><input type="checkbox" data-done ${isDone(d) ? "checked" : ""} /><span>Đã học</span></label>
+          <button type="button" class="ls-del" data-del title="${d.mine && !window.DIALOGS.some((x) => x.id === d.id) ? "Xoá bài này" : "Ẩn bài này"}" aria-label="Xoá bài">🗑</button>`}</li>`).join("")}</ol>
       </section>`;
     }).join("");
     $("dlgTable").innerHTML = units || `<p class="empty-row">${topicFilter === "saved" && !q ? "Chưa có bài nào của bạn. Bài tạo bằng AI hoặc dán vào sẽ tự lưu ở đây; bài có sẵn thì bấm ☆ Lưu." : "Không tìm thấy bài nào."}</p>`;
     $("dlgCount").textContent = `${list.length} bài · đã học ${list.filter(isDone).length}`;
+    const nHidden = everything.filter(isHidden).length;
+    if (nHidden) $("dlgTable").insertAdjacentHTML("beforeend", `<p class="hidden-note"><button type="button" class="linkish" data-showhidden>${tableUi.showHidden ? "Thôi hiện bài đã ẩn" : `Hiện ${nHidden} bài đã ẩn`}</button></p>`);
   }
   function onTopicClick(e) {
+    if (e.target.closest("[data-showhidden]")) { tableUi.showHidden = !tableUi.showHidden; return renderTopics(); }
     const row = e.target.closest("li[data-id]");
     if (!row) return;
+    if (e.target.closest("[data-del]")) return deleteLesson(row.dataset.id);
+    if (e.target.closest("[data-unhide]")) { setHidden(row.dataset.id, false); return renderTopics(); }
     if (e.target.closest(".ls-done")) {
       if (e.target.matches("input[data-done]")) setDone(row.dataset.id, e.target.checked);
       return; // the tick never opens the lesson
@@ -1346,7 +1377,7 @@ Name2: English sentence | Vietnamese translation`;
   function safeGet(k) { try { return JSON.parse(localStorage.getItem("se_" + k)); } catch { return null; } }
   // Synced lists: every changed item gets updatedAt, every removed item a tombstone, so computer and phone
   // can merge their copies (newest version of each item wins, deletions spread). sync.js does the merging.
-  const SYNC_LISTS = ["saved", "videos", "articles", "speeches", "words", "log", "done"];
+  const SYNC_LISTS = ["saved", "videos", "articles", "speeches", "words", "log", "done", "hidden"];
   const SYNC_PREFS = ["level", "aiModel", "alwaysAi", "showVi", "voices", "geminiVoice", "geminiKey", "learnerName"];
   function safeSet(k, v) {
     try {
