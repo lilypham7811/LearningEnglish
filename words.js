@@ -1194,6 +1194,13 @@
   });
   document.addEventListener("se:synced", () => { updateNav(); if (!$("view-words").hidden && !ui.review) render(); });
 
-  window.SE_WORDS = { save, popover, sayWord, fromText, tapWord, applyDictExamples };
+  // Numbers for the progress page (Tiến độ học tập).
+  function stats() {
+    const all = list();
+    return { total: all.length, fresh: all.filter((w) => w.stage === 0).length, known: all.filter(known).length,
+      learning: all.filter((w) => w.stage > 0 && !known(w)).length, speaking: all.filter((w) => !isReading(w)).length,
+      reading: all.filter(isReading).length, left: due().length, reviewedToday: all.filter(reviewedToday).length };
+  }
+  window.SE_WORDS = { save, popover, sayWord, fromText, tapWord, applyDictExamples, stats };
   updateNav();
 })();

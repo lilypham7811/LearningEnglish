@@ -1400,7 +1400,7 @@ Name2: English sentence | Vietnamese translation`;
   // Synced lists: every changed item gets updatedAt, every removed item a tombstone, so computer and phone
   // can merge their copies (newest version of each item wins, deletions spread). sync.js does the merging.
   const SYNC_LISTS = ["saved", "videos", "articles", "speeches", "words", "log", "done", "hidden"];
-  const SYNC_PREFS = ["level", "aiModel", "alwaysAi", "showVi", "voices", "geminiVoice", "geminiKey", "learnerName"];
+  const SYNC_PREFS = ["level", "aiModel", "alwaysAi", "showVi", "voices", "geminiVoice", "geminiKey", "learnerName", "dailyGoal"];
   function safeSet(k, v) {
     try {
       if (SYNC_LISTS.includes(k) && Array.isArray(v)) v = stampList(k, v);
@@ -1550,44 +1550,249 @@ Name2: English sentence | Vietnamese translation`;
     return n;
   }
 
+  // ---------- Tiến độ học tập ----------
+  // Laid out like the progress screens of the big learning apps: today against a daily goal and the streak,
+  // headline numbers for the chosen period (vs the period before), minutes per day, vocabulary by stage, the
+  // dialog path by level, time by skill, pronunciation over time, achievements; then the calendar and the log.
+  // Charts: one hue (the app's green), thin marks, hover/focus tooltips, recessive axes.
+  const goalMin = () => +(safeGet("dailyGoal") || 15);
+  const startOf = (t) => { const d = new Date(t); d.setHours(0, 0, 0, 0); return d.getTime(); };
+  function bestStreak(days) {
+    const sorted = [...days].sort();
+    let best = 0, run = 0, prev = null;
+    for (const k of sorted) {
+      const t = new Date(k + "T00:00:00").getTime();
+      run = prev != null && Math.round((t - prev) / 86400000) === 1 ? run + 1 : 1;
+      best = Math.max(best, run);
+      prev = t;
+    }
+    return best;
+  }
+  // One tooltip for every chart: marks carry data-tip ("value|label"), shown on hover and keyboard focus.
+  function chartTip() {
+    let tip = $("chartTip");
+    if (tip) return tip;
+    tip = document.createElement("div");
+    tip.id = "chartTip"; tip.className = "chart-tip"; tip.setAttribute("role", "tooltip"); tip.hidden = true;
+    document.body.appendChild(tip);
+    const show = (el, x, y) => {
+      const [val, label] = (el.dataset.tip || "").split("|");
+      tip.replaceChildren();
+      const b = document.createElement("b"); b.textContent = val;
+      const s = document.createElement("span"); s.textContent = label || "";
+      tip.append(b, s);
+      tip.hidden = false;
+      const r = tip.getBoundingClientRect();
+      tip.style.left = Math.min(window.innerWidth - r.width - 8, Math.max(8, x - r.width / 2)) + "px";
+      tip.style.top = Math.max(8, y - r.height - 12) + "px";
+    };
+    const view = $("view-progress");
+    view.addEventListener("pointermove", (e) => { const el = e.target.closest("[data-tip]"); if (el) show(el, e.clientX, e.clientY); else tip.hidden = true; });
+    view.addEventListener("pointerleave", () => { tip.hidden = true; });
+    view.addEventListener("focusin", (e) => { const el = e.target.closest("[data-tip]"); if (el) { const r = el.getBoundingClientRect(); show(el, r.left + r.width / 2, r.top); } });
+    view.addEventListener("focusout", () => { tip.hidden = true; });
+    return tip;
+  }
+  const niceMax = (v) => { for (const m of [5, 10, 15, 20, 30, 45, 60, 90, 120, 180, 240, 360, 480, 600]) if (v <= m) return m; return Math.ceil(v / 120) * 120; };
+  // Columns: minutes per day (or week), a goal line, value labelled on the highest column only.
+  function columnChart(el, data, { goal = 0, unit = "phút" } = {}) {
+    const W = Math.max(280, el.clientWidth || 600), H = 210, L = 34, R = 10, T = 16, B = 26;
+    const max = niceMax(Math.max(goal, ...data.map((d) => d.v), 1));
+    const y = (v) => T + (H - T - B) * (1 - v / max);
+    const band = (W - L - R) / data.length, bw = Math.min(24, band * 0.62);
+    const top = data.reduce((m, d, i) => (d.v > (data[m]?.v ?? -1) ? i : m), 0);
+    let g = "";
+    for (const v of [0, max / 2, max]) g += `<line class="grid" x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}"/><text class="tick" x="${L - 6}" y="${y(v) + 4}" text-anchor="end">${Math.round(v)}</text>`;
+    if (goal) g += `<line class="goal" x1="${L}" x2="${W - R}" y1="${y(goal)}" y2="${y(goal)}"/><text class="tick goal-t" x="${W - R}" y="${y(goal) - 5}" text-anchor="end">mục tiêu ${goal} ${unit}</text>`;
+    data.forEach((d, i) => {
+      const x = L + band * i + (band - bw) / 2, yv = y(d.v), y0 = y(0), h = y0 - yv;
+      if (d.v > 0) {
+        const r = Math.min(4, h, bw / 2);
+        g += `<path class="col${d.cur ? " cur" : ""}" d="M${x},${y0}V${yv + r}Q${x},${yv} ${x + r},${yv}H${x + bw - r}Q${x + bw},${yv} ${x + bw},${yv + r}V${y0}Z"/>`;
+      }
+      if (i === top && d.v > 0) g += `<text class="val" x="${x + bw / 2}" y="${yv - 6}" text-anchor="middle">${Math.round(d.v)}</text>`;
+      if (d.tick) g += `<text class="tick" x="${x + bw / 2}" y="${H - 8}" text-anchor="middle">${esc(d.tick)}</text>`;
+      g += `<rect class="hit" x="${L + band * i}" y="${T}" width="${band}" height="${H - T - B}" tabindex="0" data-tip="${esc(`${Math.round(d.v)} ${unit}|${d.label}`)}"/>`;
+    });
+    el.innerHTML = `<svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}" role="img" aria-label="Biểu đồ cột">${g}</svg>`;
+  }
+  // A line with a soft wash: pronunciation score (0-100) per day.
+  function lineChart(el, pts) {
+    if (pts.length < 2) {
+      el.innerHTML = `<p class="hint">Chưa đủ dữ liệu. Bấm 🎙️ Nói thử ở Từ vựng hoặc ghi âm trong Hội thoại để có điểm phát âm.</p>`;
+      return;
+    }
+    const W = Math.max(260, el.clientWidth || 400), H = 190, L = 34, R = 14, T = 14, B = 26;
+    const x = (i) => L + ((W - L - R) * i) / (pts.length - 1), y = (v) => T + (H - T - B) * (1 - v / 100);
+    let g = "";
+    for (const v of [0, 50, 100]) g += `<line class="grid" x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}"/><text class="tick" x="${L - 6}" y="${y(v) + 4}" text-anchor="end">${v}</text>`;
+    const line = pts.map((p, i) => `${i ? "L" : "M"}${x(i)},${y(p.v)}`).join("");
+    g += `<path class="wash" d="${line}L${x(pts.length - 1)},${y(0)}L${x(0)},${y(0)}Z"/><path class="line" d="${line}"/>`;
+    const last = pts.length - 1;
+    g += `<circle class="dot" cx="${x(last)}" cy="${y(pts[last].v)}" r="5"/><text class="val" x="${x(last) - 8}" y="${y(pts[last].v) - 10}" text-anchor="end">${pts[last].v}%</text>`;
+    [0, last].forEach((i) => { g += `<text class="tick" x="${x(i)}" y="${H - 8}" text-anchor="${i ? "end" : "start"}">${esc(pts[i].tick)}</text>`; });
+    pts.forEach((p, i) => { g += `<circle class="hit" cx="${x(i)}" cy="${y(p.v)}" r="12" tabindex="0" data-tip="${esc(`${p.v}%|${p.label}`)}"/>`; });
+    el.innerHTML = `<svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}" role="img" aria-label="Đường điểm phát âm">${g}</svg>`;
+  }
+
   function renderProgress() {
     saveSession();
+    chartTip();
     const all = getLog();
-    const since = progressRange ? Date.now() - progressRange * 86400000 : 0;
+    const DAY = 86400000, now = Date.now(), today0 = startOf(now);
+    const since = progressRange ? today0 - (progressRange - 1) * DAY : 0;
     const log = all.filter((x) => x.start >= since);
-    const secs = log.reduce((a, x) => a + x.seconds, 0);
-    const days = new Set(log.map((x) => dayKey(x.start)));
-    const allDays = new Set(all.map((x) => dayKey(x.start)));
-    const scores = log.map((x) => x.best).filter((x) => x != null);
-    const rangeTxt = progressRange ? `${progressRange} ngày qua` : "từ trước đến nay";
-    const kpi = (label, val, unit, color, foot) =>
-      `<div class="kpi" style="--pc:${color}"><div class="k-label">${label}</div><div class="k-val">${val}<small> ${unit}</small></div><div class="k-foot">${foot}</div></div>`;
-    $("kpis").innerHTML =
-      kpi("Tổng thời gian", secs >= 3600 ? (secs / 3600).toFixed(1) : Math.round(secs / 60), secs >= 3600 ? "giờ" : "phút", "var(--r4)", rangeTxt) +
-      kpi("Số lần luyện", log.length, "lần", "var(--r5)", `${rangeTxt}`) +
-      kpi("Số ngày đã luyện", days.size, "ngày", "var(--r2)", progressRange ? `trên ${progressRange} ngày` : "tổng cộng") +
-      kpi("Chuỗi ngày liên tiếp", streakDays(allDays), "ngày", "var(--r1)", "luyện mỗi ngày để giữ chuỗi") +
-      kpi("Điểm phát âm TB", scores.length ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) : "–", scores.length ? "%" : "", "var(--r7)", "điểm cao nhất mỗi lần");
-
-    // Heatmap: 12 weeks (columns) × 7 days (rows, Monday first), shaded by minutes practised.
+    const prev = progressRange ? all.filter((x) => x.start >= since - progressRange * DAY && x.start < since) : [];
+    const sum = (l) => l.reduce((a, x) => a + x.seconds, 0);
+    const secs = sum(log), prevSecs = sum(prev);
     const perDay = {};
     all.forEach((x) => { const k = dayKey(x.start); perDay[k] = (perDay[k] || 0) + x.seconds; });
-    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const allDays = new Set(Object.keys(perDay).filter((k) => perDay[k] > 0));
+    const days = [...allDays].filter((k) => new Date(k + "T00:00:00").getTime() >= since);
+    const acts = (l, k) => l.reduce((a, x) => a + (x.acts?.[k] || 0), 0);
+    const scoreOf = (l) => { const s = l.map((x) => x.best).filter((x) => x != null); return s.length ? Math.round(s.reduce((a, b) => a + b, 0) / s.length) : null; };
+    const done = safeGet("done") || [];
+    const doneIn = (a0, a1) => done.filter((x) => (x.savedAt || 0) >= a0 && (x.savedAt || 0) < a1).length;
+    const rangeTxt = progressRange ? `${progressRange} ngày qua` : "từ trước đến nay";
+    const w = window.SE_WORDS?.stats?.() || { total: 0, fresh: 0, known: 0, learning: 0, speaking: 0, reading: 0, left: 0, reviewedToday: 0 };
+
+    // Today: minutes against the daily goal, and the streak.
+    const goal = goalMin(), todayMin = Math.round((perDay[dayKey(now)] || 0) / 60);
+    const streak = streakDays(allDays), best = Math.max(bestStreak(allDays), streak);
+    const pct = Math.min(100, Math.round((todayMin / goal) * 100));
+    $("progToday").innerHTML = `<div class="pt-main">
+        <div class="pt-label">Hôm nay</div>
+        <div class="pt-hero">${todayMin}<small> / ${goal} phút</small></div>
+        <div class="meter" role="meter" aria-valuemin="0" aria-valuemax="${goal}" aria-valuenow="${todayMin}" aria-label="Phút học hôm nay so với mục tiêu"><i style="width:${pct}%"></i></div>
+        <div class="pt-note">${todayMin >= goal ? "✓ Đã đạt mục tiêu hôm nay. Giỏi lắm!" : todayMin ? `Còn ${goal - todayMin} phút nữa là đạt mục tiêu.` : "Bắt đầu bằng một việc nhỏ: 1 từ, 1 câu, 1 phút."}
+          ${w.reviewedToday ? ` · ${w.reviewedToday} từ đã ôn` : ""}</div>
+      </div>
+      <div class="pt-side">
+        <div class="pt-streak"><span class="pt-fire" aria-hidden="true">🔥</span><div><b>${streak}</b> ngày liên tiếp<br><span class="muted small">Kỷ lục: ${best} ngày</span></div></div>
+        <label class="pt-goal">Mục tiêu mỗi ngày <select id="goalSel" class="select">${[5, 10, 15, 20, 30, 45, 60].map((m) => `<option value="${m}" ${m === goal ? "selected" : ""}>${m} phút</option>`).join("")}</select></label>
+      </div>`;
+    $("goalSel").onchange = (e) => { safeSet("dailyGoal", +e.target.value); renderProgress(); };
+
+    // Headline numbers for the period, with the change against the period before.
+    const delta = (cur, before, up = true) => {
+      if (!progressRange || before == null || cur == null) return "";
+      if (!before) return cur ? `<span class="delta up">▲ mới</span>` : "";
+      const d = Math.round(((cur - before) / before) * 100);
+      if (!d) return `<span class="delta">= kỳ trước</span>`;
+      return `<span class="delta ${(d > 0) === up ? "up" : "down"}">${d > 0 ? "▲" : "▼"} ${Math.abs(d)}% so với kỳ trước</span>`;
+    };
+    const kpi = (label, val, unit, foot) => `<div class="kpi"><div class="k-label">${label}</div><div class="k-val">${val}<small> ${unit}</small></div><div class="k-foot">${foot}</div></div>`;
+    const hrs = secs >= 3600;
+    const score = scoreOf(log), prevScore = scoreOf(prev);
+    $("kpis").innerHTML =
+      kpi("Thời gian học", hrs ? (secs / 3600).toFixed(1) : Math.round(secs / 60), hrs ? "giờ" : "phút", delta(secs, prevSecs) || rangeTxt) +
+      kpi("Số ngày học", days.length, progressRange ? `/ ${progressRange} ngày` : "ngày", delta(days.length, progressRange ? new Set(prev.map((x) => dayKey(x.start))).size : null) || rangeTxt) +
+      kpi("Lượt ôn từ", acts(log, "review"), "lượt", delta(acts(log, "review"), progressRange ? acts(prev, "review") : null) || rangeTxt) +
+      kpi("Bài hội thoại đã học", progressRange ? doneIn(since, Infinity) : done.length, "bài", delta(doneIn(since, Infinity), progressRange ? doneIn(since - progressRange * DAY, since) : null) || rangeTxt) +
+      kpi("Điểm phát âm", score ?? "–", score != null ? "%" : "", delta(score, prevScore) || "trung bình điểm cao nhất mỗi lần");
+
+    // Minutes per day (7 or 30 days), or per week for "Tất cả" (last 12 weeks).
+    const DOW = ["CN", "T2", "T3", "T4", "T5", "T6", "T7"];
+    let series;
+    if (progressRange) {
+      series = [...Array(progressRange)].map((_, i) => {
+        const t = today0 - (progressRange - 1 - i) * DAY, d = new Date(t);
+        const show = progressRange <= 7 || i === progressRange - 1 || (progressRange - 1 - i) % 5 === 0;
+        return { v: (perDay[dayKey(t)] || 0) / 60, cur: t === today0, label: d.toLocaleDateString("vi-VN", { weekday: "long", day: "2-digit", month: "2-digit" }),
+          tick: show ? (progressRange <= 7 ? DOW[d.getDay()] : `${d.getDate()}/${d.getMonth() + 1}`) : "" };
+      });
+      $("dailyTitle").textContent = "Thời gian mỗi ngày";
+      $("dailySub").textContent = `phút · ${progressRange} ngày qua`;
+      columnChart($("dailyChart"), series, { goal });
+    } else {
+      const mon = new Date(today0); mon.setDate(mon.getDate() - ((mon.getDay() + 6) % 7));
+      series = [...Array(12)].map((_, i) => {
+        const a0 = mon.getTime() - (11 - i) * 7 * DAY, d = new Date(a0);
+        let v = 0;
+        for (let k = 0; k < 7; k++) v += perDay[dayKey(a0 + k * DAY)] || 0;
+        return { v: v / 60, cur: i === 11, label: `tuần từ ${d.toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit" })}`, tick: i % 3 === 2 || i === 11 ? `${d.getDate()}/${d.getMonth() + 1}` : "" };
+      });
+      $("dailyTitle").textContent = "Thời gian mỗi tuần";
+      $("dailySub").textContent = "phút · 12 tuần gần nhất";
+      columnChart($("dailyChart"), series, { goal: goal * 7 });
+    }
+
+    // Vocabulary by stage (an ordered scale: one hue, light → dark).
+    const parts = [["Chờ học", w.fresh, "s1"], ["Đang học", w.learning, "s2"], ["Đã thuộc", w.known, "s3"]];
+    $("vocabSub").textContent = `${w.total} từ`;
+    $("vocabProg").innerHTML = w.total ? `<div class="stack" role="img" aria-label="Từ vựng: ${parts.map(([l, n]) => `${l} ${n}`).join(", ")}">
+        ${parts.filter(([, n]) => n).map(([l, n, c]) => `<i class="${c}" style="flex-grow:${n}" tabindex="0" data-tip="${n} từ|${l}"></i>`).join("")}</div>
+      <div class="stack-legend">${parts.map(([l, n, c]) => `<span><i class="${c}"></i>${l} <b>${n}</b></span>`).join("")}</div>
+      <div class="vocab-more"><span>🗣 Speaking <b>${w.speaking}</b></span><span>📖 Reading <b>${w.reading}</b></span><span>Còn ôn hôm nay <b>${w.left}</b></span><span>Đã ôn hôm nay <b>${w.reviewedToday}</b></span></div>`
+      : `<p class="hint">Chưa có từ nào. Lưu từ trong bài báo, video hay hội thoại để bắt đầu.</p>`;
+
+    // The dialog path: lessons done per level.
+    const dlg = allDialogs().filter((d) => !hiddenIds().has("hide:" + d.id)), doneSet = doneIds();
+    const rows = [["Beginner", "Cơ bản", "A2"], ["Intermediate", "Trung cấp", "B1"], ["Advanced", "Nâng cao", "C1"]].map(([lv, name, cefr]) => {
+      const at = dlg.filter((d) => d.level === lv), n = at.filter((d) => doneSet.has("done:" + d.id)).length;
+      return `<div class="path-row"><span class="pr-name">${name} <small>${cefr}</small></span>
+        <span class="meter" role="meter" aria-valuemin="0" aria-valuemax="${at.length}" aria-valuenow="${n}" aria-label="${name}" tabindex="0" data-tip="${n}/${at.length} bài|${name} (${cefr})"><i style="width:${at.length ? (n / at.length) * 100 : 0}%"></i></span>
+        <span class="pr-n">${n}/${at.length}</span></div>`;
+    });
+    const totalDone = dlg.filter((d) => doneSet.has("done:" + d.id)).length;
+    $("pathSub").textContent = `${totalDone}/${dlg.length} bài đã học`;
+    $("pathProg").innerHTML = rows.join("");
+
+    // Time by skill in the period (one hue; longest first; value at the end of each bar).
+    const kinds = ["talk", "words", "video", "article", "speech"].map((k) => ({ k, s: log.filter((x) => (x.kind || "talk") === k).reduce((a, x) => a + x.seconds, 0) }))
+      .sort((a, b) => b.s - a.s);
+    const kmax = kinds[0]?.s || 1;
+    $("skillSub").textContent = rangeTxt;
+    $("skillChart").innerHTML = secs ? kinds.map((x) => `<div class="hbar"><span class="hb-l">${KIND_NAMES[x.k]}</span>
+        <span class="hb-t" tabindex="0" data-tip="${fmtDur(x.s)}|${KIND_NAMES[x.k]}"><i style="width:${x.s ? Math.max(2, (x.s / kmax) * 100) : 0}%"></i></span>
+        <span class="hb-v">${x.s ? fmtDur(x.s) : "–"}</span></div>`).join("")
+      : `<p class="hint">Chưa có buổi luyện nào ${progressRange ? "trong " + rangeTxt : ""}.</p>`;
+
+    // Pronunciation: the day's average of each session's best score.
+    const byDay = {};
+    log.filter((x) => x.best != null).forEach((x) => { (byDay[dayKey(x.start)] ||= []).push(x.best); });
+    const pts = Object.keys(byDay).sort().slice(-30).map((k) => {
+      const d = new Date(k + "T00:00:00");
+      return { v: Math.round(byDay[k].reduce((a, b) => a + b, 0) / byDay[k].length), tick: `${d.getDate()}/${d.getMonth() + 1}`,
+        label: d.toLocaleDateString("vi-VN", { weekday: "long", day: "2-digit", month: "2-digit" }) };
+    });
+    lineChart($("scoreChart"), pts);
+
+    // Achievements: earned in colour, the rest with how far along they are.
+    const totalH = sum(all) / 3600;
+    const goalDays = Object.values(perDay).filter((s) => s / 60 >= goal).length;
+    const B = [
+      ["🔥", "Chuỗi 3 ngày", best, 3], ["🔥", "Chuỗi 7 ngày", best, 7], ["🔥", "Chuỗi 30 ngày", best, 30],
+      ["🎯", "Đạt mục tiêu 7 ngày", goalDays, 7], ["⏱️", "1 giờ luyện tập", totalH, 1], ["⏱️", "10 giờ luyện tập", totalH, 10],
+      ["📚", "50 từ trong sổ", w.total, 50], ["🏅", "10 từ đã thuộc", w.known, 10], ["🏅", "50 từ đã thuộc", w.known, 50],
+      ["🗣️", "Học xong 5 bài hội thoại", totalDone, 5], ["🗣️", "Học xong 20 bài hội thoại", totalDone, 20],
+    ];
+    const earned = B.filter(([, , v, need]) => v >= need).length;
+    $("badgeSub").textContent = `${earned}/${B.length} huy hiệu`;
+    $("badges").innerHTML = B.map(([ic, name, v, need]) => {
+      const got = v >= need, have = Math.min(need, Math.floor(v));
+      return `<div class="badge-card${got ? " got" : ""}" tabindex="0" data-tip="${got ? "Đã đạt" : `${have}/${need}`}|${name}">
+        <span class="bc-ic" aria-hidden="true">${ic}</span><span class="bc-name">${name}</span>
+        <span class="bc-prog">${got ? "✓ Đã đạt" : `${have}/${need}`}</span></div>`;
+    }).join("");
+
+    // Calendar: 12 weeks (columns) × 7 days (rows, Monday first), shaded by minutes practised.
+    const today = new Date(today0);
     const monday = new Date(today); monday.setDate(today.getDate() - ((today.getDay() + 6) % 7) - 7 * 11);
     const DAYS = ["T2", "T3", "T4", "T5", "T6", "T7", "CN"];
     let html = `<span></span>`;
-    for (let w = 0; w < 12; w++) {
-      const d = new Date(monday); d.setDate(monday.getDate() + w * 7);
-      html += `<span class="ml">${d.getDate() <= 7 || w === 0 ? "Th" + (d.getMonth() + 1) : ""}</span>`;
+    for (let wk = 0; wk < 12; wk++) {
+      const d = new Date(monday); d.setDate(monday.getDate() + wk * 7);
+      html += `<span class="ml">${d.getDate() <= 7 || wk === 0 ? "Th" + (d.getMonth() + 1) : ""}</span>`;
     }
     for (let r = 0; r < 7; r++) {
       html += `<span class="dl">${r % 2 === 0 ? DAYS[r] : ""}</span>`;
-      for (let w = 0; w < 12; w++) {
-        const d = new Date(monday); d.setDate(monday.getDate() + w * 7 + r);
-        const k = dayKey(d), s = perDay[k] || 0;
-        const lvl = !s ? 0 : s < 300 ? 1 : s < 900 ? 2 : s < 1800 ? 3 : 4;
+      for (let wk = 0; wk < 12; wk++) {
+        const d = new Date(monday); d.setDate(monday.getDate() + wk * 7 + r);
+        const k = dayKey(d), sec = perDay[k] || 0;
+        const lvl = !sec ? 0 : sec < 300 ? 1 : sec < 900 ? 2 : sec < 1800 ? 3 : 4;
         const cls = d > today ? "c future" : k === dayKey(today) ? "c today" : "c";
-        html += `<span class="${cls}" data-l="${lvl}" title="${d.toLocaleDateString("vi-VN")}: ${s ? fmtDur(s) : "chưa luyện"}"></span>`;
+        html += `<span class="${cls}" data-l="${lvl}" data-tip="${sec ? fmtDur(sec) : "chưa luyện"}|${d.toLocaleDateString("vi-VN")}"></span>`;
       }
     }
     html += `<div class="heat-legend">Ít <span class="c" data-l="0"></span><span class="c" data-l="1"></span><span class="c" data-l="2"></span><span class="c" data-l="3"></span><span class="c" data-l="4"></span> Nhiều</div>`;
@@ -1597,28 +1802,30 @@ Name2: English sentence | Vietnamese translation`;
     const byTopic = {};
     log.forEach((x) => { const t = byTopic[x.dialogId] ||= { name: x.titleVi || x.title, s: 0, n: 0 }; t.s += x.seconds; t.n++; });
     const top = Object.values(byTopic).sort((a, b) => b.s - a.s).slice(0, 7);
-    const max = top[0]?.s || 1;
-    const pillColor = (i) => `var(--r${[5, 4, 2, 7, 1, 6, 3][i % 7]})`;
+    const tmax = top[0]?.s || 1;
     $("topTopics").innerHTML = top.length
-      ? top.map((t, i) => `<div class="lg" style="--pc:${pillColor(i)}"><span class="lg-name">${esc(t.name)}</span><span class="lg-bar"><i style="width:${Math.max(4, (t.s / max) * 100)}%"></i></span><span class="lg-n">${fmtDur(t.s)}</span></div>`).join("")
+      ? top.map((t) => `<div class="hbar"><span class="hb-l">${esc(t.name)}</span><span class="hb-t"><i style="width:${Math.max(3, (t.s / tmax) * 100)}%"></i></span><span class="hb-v">${fmtDur(t.s)}</span></div>`).join("")
       : `<p class="hint">Chưa có dữ liệu. Mở một chủ đề và bắt đầu luyện nhé!</p>`;
 
     // Log table, newest first.
-    const rows = [...log].reverse().slice(0, 200);
-    $("logTable").innerHTML = rows.length
+    const logRows = [...log].reverse().slice(0, 200);
+    $("logTable").innerHTML = logRows.length
       ? `<thead><tr><th>Ngày</th><th>Giờ</th><th>Chủ đề</th><th>Đã luyện</th><th class="num">Thời gian</th><th class="num">Điểm</th></tr></thead><tbody>` +
-        rows.map((x) => {
+        logRows.map((x) => {
           const d = new Date(x.start);
-          const acts = Object.entries(x.acts).map(([k, n]) => `<span class="chip${k === "ai" ? " ai" : ""}">${ACT_NAMES[k] || k}${n > 1 ? " ×" + n : ""}</span>`).join("");
+          const a = Object.entries(x.acts).map(([k, n]) => `<span class="chip${k === "ai" ? " ai" : ""}">${ACT_NAMES[k] || k}${n > 1 ? " ×" + n : ""}</span>`).join("");
           return `<tr><td>${d.toLocaleDateString("vi-VN", { weekday: "short", day: "2-digit", month: "2-digit", year: "numeric" })}</td>
             <td class="muted">${d.toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" })}</td>
             <td><span class="chip kind-${x.kind || "talk"}">${KIND_NAMES[x.kind || "talk"]}</span> <b>${esc(x.titleVi || x.title)}</b>${x.titleVi ? `<span class="muted small"> · ${esc(x.title)}</span>` : ""}</td>
-            <td>${acts || '<span class="muted">Đọc bài</span>'}</td>
+            <td>${a || '<span class="muted">Đọc bài</span>'}</td>
             <td class="num">${fmtDur(x.seconds)}</td>
             <td class="num">${x.best != null ? x.best + "%" : "–"}</td></tr>`;
         }).join("") + "</tbody>"
       : `<tbody><tr><td class="muted">Chưa có buổi luyện nào ${progressRange ? "trong " + progressRange + " ngày qua" : ""}.</td></tr></tbody>`;
   }
+  // Charts are drawn to the panel's width: redraw when the window changes size.
+  let progResize = 0;
+  window.addEventListener("resize", () => { clearTimeout(progResize); progResize = setTimeout(() => { if (!$("view-progress").hidden) renderProgress(); }, 200); });
 
   // Shared with live.js (Google AI live practice).
   window.SE = {

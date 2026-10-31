@@ -32,7 +32,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&display=swap" />
-  <link rel="stylesheet" href="styles.css?v=69" />
+  <link rel="stylesheet" href="styles.css?v=70" />
 </head>
 <body>
 <div class="shell">
@@ -154,7 +154,7 @@
       <div class="vhead">
         <div>
           <p class="eyebrow">Phần 6 · Tiến độ luyện tập</p>
-          <h2>Thời gian luyện tập</h2>
+          <h2>Tiến độ học tập</h2>
         </div>
         <div class="seg" id="rangeSeg" role="group" aria-label="Khoảng thời gian">
           <button data-r="7" aria-pressed="true">7 ngày</button>
@@ -162,7 +162,36 @@
           <button data-r="0" aria-pressed="false">Tất cả</button>
         </div>
       </div>
+      <div class="panel prog-today" id="progToday"></div>
       <div class="kpis" id="kpis"></div>
+      <div class="panel">
+        <div class="panel-head"><h3 id="dailyTitle">Thời gian mỗi ngày</h3><span class="muted small" id="dailySub"></span></div>
+        <div class="panel-body"><div id="dailyChart" class="chart"></div></div>
+      </div>
+      <div class="stats-grid even">
+        <div class="panel">
+          <div class="panel-head"><h3>Từ vựng</h3><span class="muted small" id="vocabSub"></span></div>
+          <div class="panel-body" id="vocabProg"></div>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><h3>Lộ trình hội thoại</h3><span class="muted small" id="pathSub"></span></div>
+          <div class="panel-body" id="pathProg"></div>
+        </div>
+      </div>
+      <div class="stats-grid even">
+        <div class="panel">
+          <div class="panel-head"><h3>Thời gian theo kỹ năng</h3><span class="muted small" id="skillSub"></span></div>
+          <div class="panel-body" id="skillChart"></div>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><h3>Điểm phát âm</h3><span class="muted small">trung bình mỗi ngày</span></div>
+          <div class="panel-body"><div id="scoreChart" class="chart"></div></div>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="panel-head"><h3>Thành tích</h3><span class="muted small" id="badgeSub"></span></div>
+        <div class="panel-body"><div id="badges" class="badges"></div></div>
+      </div>
       <div class="stats-grid">
         <div class="panel">
           <div class="panel-head"><h3>Lịch luyện tập</h3><span class="muted small">12 tuần gần nhất</span></div>
@@ -173,13 +202,11 @@
           <div class="panel-body"><div id="topTopics" class="legend"></div></div>
         </div>
       </div>
-      <div class="panel">
-        <div class="panel-head">
-          <h3>Nhật ký luyện tập</h3>
-          <button id="clearLog" class="btn ghost danger">Xóa nhật ký</button>
-        </div>
+      <details class="panel log-details">
+        <summary class="panel-head"><h3>Nhật ký luyện tập</h3><span class="muted small">bấm để xem</span></summary>
         <div class="panel-body table-scroll"><table class="lib" id="logTable"></table></div>
-      </div>
+        <div class="panel-body"><button id="clearLog" class="btn ghost danger">Xóa nhật ký</button></div>
+      </details>
     </section>
     <!-- ===== Sections 3-5: rendered by library.js ===== -->
     <section class="view" id="view-video" hidden></section>
@@ -458,14 +485,14 @@
   </form>
 </dialog>
 
-<script src="dialogs.js?v=69"></script>
-<script src="app.js?v=69"></script>
-<script src="live.js?v=69"></script>
-<script src="library.js?v=69"></script>
-<script src="words.js?v=69"></script>
-<script src="handoff.js?v=69"></script>
-<script src="voice.js?v=69"></script>
-<script src="sync.js?v=69"></script>
-<script src="cloudvoice.js?v=69"></script>
+<script src="dialogs.js?v=70"></script>
+<script src="app.js?v=70"></script>
+<script src="live.js?v=70"></script>
+<script src="library.js?v=70"></script>
+<script src="words.js?v=70"></script>
+<script src="handoff.js?v=70"></script>
+<script src="voice.js?v=70"></script>
+<script src="sync.js?v=70"></script>
+<script src="cloudvoice.js?v=70"></script>
 </body>
 </html>
