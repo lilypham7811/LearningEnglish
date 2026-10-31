@@ -34,6 +34,10 @@ jobs:
           [ -s kokoro-v1.0.onnx ] || curl -sSfLo kokoro-v1.0.onnx "$B/kokoro-v1.0.onnx"
           [ -s voices-v1.0.bin ] || curl -sSfLo voices-v1.0.bin "$B/voices-v1.0.bin"
       - run: pip install -q kokoro-onnx==0.4.7 lameenc==1.9.0 beautifulsoup4==4.15.0 trafilatura==2.3.1
+      # Pronunciation (misaki, see make_voice.py). Not "misaki[en]": that also pulls in torch (gigabytes), unused here.
+      - run: >-
+          pip install -q misaki==0.9.4 num2words==0.5.14 spacy==3.8.18 phonemizer-fork==3.3.1 espeakng-loader==0.2.4
+          https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl
       - name: Article text, dictionary examples, then audio
         run: |
           git config user.name "AI voice"

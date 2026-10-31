@@ -524,7 +524,7 @@
           .map(([k, l]) => `<button data-f="${k}" aria-pressed="${ui.f === k}">${l}</button>`).join("")}</div>
         <div class="words-opts">
           <button type="button" class="btn primary small" id="loopBtn" aria-pressed="${LOOP.on && LOOP.mode === "practice"}">${LOOP.on && LOOP.mode === "practice" ? "■ Dừng nghe" : "🎧 Nghe & nói theo"}</button>
-          <button type="button" class="btn small" id="driveBtn" aria-pressed="${LOOP.on && LOOP.mode === "drive"}" title="Đọc từ, nghĩa tiếng Việt và câu ví dụ liên tục, không cần bấm">${LOOP.on && LOOP.mode === "drive" ? "■ Dừng" : "🚗 Nghe khi lái xe"}</button>
+          <button type="button" class="btn small" id="driveBtn" aria-pressed="${LOOP.on && LOOP.mode === "drive"}" title="Mỗi từ đọc 10 lần: từ, nghĩa tiếng Việt và một câu ví dụ ngắn, không cần bấm">${LOOP.on && LOOP.mode === "drive" ? "■ Dừng" : "🚗 Nghe khi lái xe"}</button>
           <button type="button" class="btn ghost small" id="phoneHelp">📱 Lưu từ trên điện thoại</button>
           <label class="fam-toggle"><input type="checkbox" id="famToggle" ${ui.group ? "checked" : ""} /> 🧩 Gom theo họ từ</label>
           <div class="seg seg-sm" id="accentSeg" title="Giọng đọc từ: bản ghi âm của từ điển Oxford">${[["gb", "🔊 Giọng Anh"], ["us", "Giọng Mỹ"]]
@@ -993,9 +993,9 @@
   }
 
   // ---------- 🎧 Nghe & nói theo · 🚗 Nghe khi lái xe ----------
-  // 🚗 (mode "drive"): hands-free while driving. Each word twice, its Vietnamese meaning, then its examples once
-  // each, short pauses; the whole list again as many times as chosen in 🔁 Nghe (shared with dialogs and
-  // articles); it keeps going when another section is opened and keeps the screen on.
+  // 🚗 (mode "drive"): hands-free while driving. Each word DRIVE_TIMES times before the next one: the word, its
+  // Vietnamese meaning (first time only), then one example, its shortest everyday one; short pauses. It keeps
+  // going when another section is opened and keeps the screen on.
   // Plays today's words first (the "Ôn hôm nay" list), then the other words in the chosen filter: each word
   // 5 times, slowly, with a pause after each time to say it back; then its easiest everyday example 5 times.
   // Finishing a word that is on today's list counts as today's review (like hearing the word and an example).
@@ -1062,8 +1062,8 @@
         const b = e.target.closest("[data-loop]"); if (!b) return;
         const a = b.dataset.loop;
         if (a === "pause") { LOOP.paused = !LOOP.paused; if (LOOP.paused) { SE.stopAll(); LOOP.audio?.pause(); } showLoop(); }
-        else if (a === "next") { LOOP.idx++; restartLoop(); }
-        else if (a === "prev") { LOOP.idx = Math.max(0, LOOP.idx - 1); restartLoop(); }
+        else if (a === "next") { LOOP.idx++; LOOP.round = 1; restartLoop(); }
+        else if (a === "prev") { LOOP.idx = Math.max(0, LOOP.idx - 1); LOOP.round = 1; restartLoop(); }
         else if (a === "stop") stopLoop();
       };
       bar.onchange = (e) => {
@@ -1080,7 +1080,7 @@
     bar.hidden = false;
     const step = !now ? "Đang chuẩn bị…" : LOOP.mode === "drive" ? (now.isWord ? "Từ" : now.isVi ? "Nghĩa" : "Câu ví dụ")
       : `${now.isWord ? "Từ" : "Câu ví dụ"} · lần ${now.rep}/${REPS}`;
-    const round = LOOP.mode === "drive" && LOOP.times !== 1 ? ` · lượt ${LOOP.round}/${LOOP.times || "∞"}` : "";
+    const round = LOOP.mode === "drive" ? ` · lần ${LOOP.round}/${LOOP.times}` : "";
     bar.innerHTML = `<div class="loop-main">
         <div class="loop-meta">${LOOP.mode === "drive" ? "🚗" : "🎧"} Từ ${LOOP.idx + 1}/${LOOP.items.length}${round}${LOOP.todayIds.has(w.id) ? " · ôn hôm nay" : ""} · ${step}${LOOP.paused ? " · đã tạm dừng" : ""}</div>
         <div class="loop-word${now && now.isWord ? " on" : ""}">${esc(w.word)} ${w.ipa ? `<small>${esc(w.ipa)}</small>` : ""}</div>
@@ -1096,13 +1096,13 @@
         <button class="btn small" data-loop="stop">■ Dừng</button>
       </div>`;
   }
-  // 🚗 One word: twice, its Vietnamese meaning, then its examples (up to 3) once each.
-  async function driveWord(w, token) {
+  // 🚗 One time through a word: the word, its Vietnamese meaning (the first time), its one example.
+  const DRIVE_TIMES = 10;
+  async function driveWord(w, token, first) {
     const live = () => token === LOOP.token && LOOP.on;
-    const exs = [...[...(w.context ? [w.context] : []), ...(w.examples || [])].slice(0, 3), ...(w.myExamples || [])].filter(Boolean);
+    const ex = easyExample(w);
     const vi = (w.meaningVi || "").split(/[;,]/).map((x) => x.trim()).filter(Boolean).slice(0, 2).join(", ");
-    const steps = [{ text: w.word, isWord: true }, { text: w.word, isWord: true }, ...(vi ? [{ text: vi, isVi: true }] : []),
-      ...exs.map((t) => ({ text: t }))];
+    const steps = [{ text: w.word, isWord: true }, ...(first && vi ? [{ text: vi, isVi: true }] : []), ...(ex ? [{ text: ex }] : [])];
     for (let i = 0; i < steps.length; i++) {
       await wait(0, token);
       if (!live()) return false;
@@ -1115,22 +1115,17 @@
       if (LOOP.paused) { i--; continue; } // paused in the middle: say it again after resuming
       await wait(s.isWord ? 700 : 1000, token);
     }
-    await wait(1500, token);
+    await wait(1200, token);
     return live();
   }
   async function runLoop(token) {
     if (LOOP.mode === "drive") {
-      for (;;) {
-        while (LOOP.on && token === LOOP.token && LOOP.idx < LOOP.items.length) {
-          const w = LOOP.items[LOOP.idx];
-          if (!(await driveWord(w, token))) return;
-          if (LOOP.todayIds.has(w.id)) { studied(w.id, "word"); studied(w.id, "ex"); }
-          LOOP.idx++;
-        }
-        if (token !== LOOP.token || !LOOP.on) return;
-        if (LOOP.times !== 0 && LOOP.round >= LOOP.times) break;
-        LOOP.round++; LOOP.idx = 0;                                   // the whole list again
-        await wait(2500, token);
+      while (LOOP.on && token === LOOP.token && LOOP.idx < LOOP.items.length) {
+        const w = LOOP.items[LOOP.idx];
+        for (; LOOP.round <= LOOP.times; LOOP.round++) if (!(await driveWord(w, token, LOOP.round === 1))) return;
+        if (LOOP.todayIds.has(w.id)) { studied(w.id, "word"); studied(w.id, "ex"); }
+        LOOP.idx++; LOOP.round = 1;
+        await wait(1500, token);
       }
       if (token === LOOP.token && LOOP.on) { toast("🚗 Đã nghe xong."); stopLoop(); }
       return;
@@ -1168,8 +1163,7 @@
     LOOP.audio.src = SE.SILENT_WAV;
     LOOP.audio.play().catch(() => {});
     SE.unlockAudio?.();
-    const times = +(pref("listenRepeat", "1"));
-    Object.assign(LOOP, { on: true, paused: false, idx: 0, items, todayIds, now: null, mode, round: 1, times: Number.isFinite(times) ? times : 1 });
+    Object.assign(LOOP, { on: true, paused: false, idx: 0, items, todayIds, now: null, mode, round: 1, times: mode === "drive" ? DRIVE_TIMES : 1 });
     try { LOOP.lock = await navigator.wakeLock?.request("screen"); } catch { LOOP.lock = null; } // keep the screen on
     renderLoopBtn(); restartLoop();
   }
