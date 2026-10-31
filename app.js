@@ -118,7 +118,7 @@
       const ok = await new Promise((resolve) => {
         cloudDone?.(true);
         cloudDone = resolve;
-        a.src = `https://translate.googleapis.com/translate_tts?client=gtx&ie=UTF-8&tl=${which === "B" ? "en-GB" : "en-US"}&q=${encodeURIComponent(c.t)}`;
+        a.src = `https://translate.googleapis.com/translate_tts?client=gtx&ie=UTF-8&tl=${which === "B" ? "en-GB" : which === "vi" ? "vi" : "en-US"}&q=${encodeURIComponent(c.t)}`;
         a.playbackRate = Math.min(Math.max(rate || 1, 0.5), 2);
         a.ontimeupdate = () => { if (onWord && a.duration) onWord(c.from + Math.floor((c.t.length * a.currentTime) / a.duration)); };
         a.onended = () => resolve(true);
@@ -130,7 +130,29 @@
     }
     return true;
   }
-  if (isIOS) makeQuietFrame();
+  makeQuietFrame(); // also used everywhere for Vietnamese (sayVi)
+
+  // Vietnamese (a word's meaning, read aloud in the driving mode): Google's Vietnamese voice, else the device's.
+  function sayVi(text, rate = 1) {
+    cloudGen++;
+    cancelSpeech();
+    return speakCloud(text, "vi", rate).then((ok) => ok || new Promise((resolve) => {
+      const u = new SpeechSynthesisUtterance(text);
+      u.lang = "vi-VN";
+      u.rate = rate;
+      u.onend = u.onerror = () => resolve(true);
+      synth.speak(u);
+      setTimeout(() => resolve(false), Math.max(4000, text.length * 150));
+    }));
+  }
+  // Called inside a tap before a long hands-free session: each audio element plays a moment of silence, so the
+  // phone lets it play later without another tap (iPhone allows that only for elements started by a tap).
+  const SILENT_WAV = "data:audio/wav;base64,UklGRrQBAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YZABAACAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICA"; // 0.05 s of silence
+  function unlockAudio() {
+    const win = quiet?.dataset.ready && quiet.contentWindow;
+    if (win) { cloudAudio ||= new win.Audio(); cloudAudio.src = SILENT_WAV; cloudAudio.play().catch(() => {}); }
+    window.SE_CLOUDVOICE?.unlock?.();
+  }
 
   // Settings → "Không nghe thấy tiếng?": each button plays one way of making sound and writes what happened,
   // so a screenshot shows which one the device blocks. Each test needs its own tap (phones only allow sound
@@ -1614,6 +1636,7 @@ Name2: English sentence | Vietnamese translation`;
     levelName: (lv) => LEVEL_VI[lv] || lv,
     // Speech helpers for sections 3-5.
     say: (text, rate = state.rate) => { stopAll(); state.playToken++; return speak(text, state.voiceA, rate); },
+    sayVi, unlockAudio, SILENT_WAV,
     listenOnce: (maxMs, target, onInterim) => listenOnce(maxMs, target, onInterim),
     stopListening: () => state.listening?.end(),
     compareWords, pronunciationTips, hasRecognition: !!Recognition,

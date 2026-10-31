@@ -523,7 +523,8 @@
         <div class="seg" id="wordFilter">${[["all", "Tất cả"], ["due", "Ôn hôm nay"], ["learning", "Đang học"], ["mastered", "Đã thuộc"], ["speaking", "🗣 Speaking"], ["reading", "📖 Reading"], ["video", "Từ video"]]
           .map(([k, l]) => `<button data-f="${k}" aria-pressed="${ui.f === k}">${l}</button>`).join("")}</div>
         <div class="words-opts">
-          <button type="button" class="btn primary small" id="loopBtn" aria-pressed="${LOOP.on}">${LOOP.on ? "■ Dừng nghe" : "🎧 Nghe & nói theo"}</button>
+          <button type="button" class="btn primary small" id="loopBtn" aria-pressed="${LOOP.on && LOOP.mode === "practice"}">${LOOP.on && LOOP.mode === "practice" ? "■ Dừng nghe" : "🎧 Nghe & nói theo"}</button>
+          <button type="button" class="btn small" id="driveBtn" aria-pressed="${LOOP.on && LOOP.mode === "drive"}" title="Đọc từ, nghĩa tiếng Việt và câu ví dụ liên tục, không cần bấm">${LOOP.on && LOOP.mode === "drive" ? "■ Dừng" : "🚗 Nghe khi lái xe"}</button>
           <button type="button" class="btn ghost small" id="phoneHelp">📱 Lưu từ trên điện thoại</button>
           <label class="fam-toggle"><input type="checkbox" id="famToggle" ${ui.group ? "checked" : ""} /> 🧩 Gom theo họ từ</label>
           <div class="seg seg-sm" id="accentSeg" title="Giọng đọc từ: bản ghi âm của từ điển Oxford">${[["gb", "🔊 Giọng Anh"], ["us", "Giọng Mỹ"]]
@@ -542,7 +543,8 @@
       toast("Chưa đọc được chữ đã chép. Giữ ngón tay vào ô “Thêm từ mới”, chọn Dán, rồi bấm Thêm.");
     };
     root.querySelector("#phoneHelp").onclick = openPhoneHelp;
-    root.querySelector("#loopBtn").onclick = () => (LOOP.on ? stopLoop() : startLoop());
+    root.querySelector("#loopBtn").onclick = () => (LOOP.on ? stopLoop() : startLoop("practice"));
+    root.querySelector("#driveBtn").onclick = () => (LOOP.on ? stopLoop() : startLoop("drive"));
     root.querySelector("#wordSearch").oninput = (e) => { ui.q = e.target.value; renderList(); };
     root.querySelector("#famToggle").onchange = (e) => { ui.group = e.target.checked; setPref("wordsGroup", ui.group ? "1" : "0"); renderList(); };
     root.querySelector("#accentSeg").onclick = (e) => {
@@ -990,11 +992,14 @@
     $("navWords").textContent = n ? `${n} từ${d ? ` · ${d} cần ôn hôm nay` : ""}` : "Lưu từ mới để ôn";
   }
 
-  // ---------- 🎧 Nghe & nói theo ----------
+  // ---------- 🎧 Nghe & nói theo · 🚗 Nghe khi lái xe ----------
+  // 🚗 (mode "drive"): hands-free while driving. Each word twice, its Vietnamese meaning, then its examples once
+  // each, short pauses; the whole list again as many times as chosen in 🔁 Nghe (shared with dialogs and
+  // articles); it keeps going when another section is opened and keeps the screen on.
   // Plays today's words first (the "Ôn hôm nay" list), then the other words in the chosen filter: each word
   // 5 times, slowly, with a pause after each time to say it back; then its easiest everyday example 5 times.
   // Finishing a word that is on today's list counts as today's review (like hearing the word and an example).
-  const LOOP = { on: false, paused: false, token: 0, idx: 0, items: [], todayIds: new Set(), audio: null, lock: null,
+  const LOOP = { on: false, paused: false, token: 0, idx: 0, items: [], todayIds: new Set(), audio: null, lock: null, mode: "practice", round: 1, times: 1,
     rate: parseFloat(pref("loopRate", "0.8")) || 0.8 };
   const REPS = 5;
   const wait = (ms, token) => new Promise((res) => {
@@ -1032,7 +1037,9 @@
   }
   function playToEnd(url, rate) {
     return new Promise((res) => {
-      const a = (LOOP.audio = new Audio(url));
+      // One element for the whole session, started inside the tap (iPhone then lets it play on its own).
+      const a = (LOOP.audio ||= new Audio());
+      a.src = url;
       a.playbackRate = rate; a.preservesPitch = true;
       a.onended = () => res(true); a.onerror = () => res(false);
       a.play().catch(() => res(false));
@@ -1071,12 +1078,14 @@
     const bar = loopBar(), w = LOOP.items[LOOP.idx];
     if (!LOOP.on || !w) { bar.hidden = true; return; }
     bar.hidden = false;
-    const step = now ? `${now.isWord ? "Từ" : "Câu ví dụ"} · lần ${now.rep}/${REPS}` : "Đang chuẩn bị…";
+    const step = !now ? "Đang chuẩn bị…" : LOOP.mode === "drive" ? (now.isWord ? "Từ" : now.isVi ? "Nghĩa" : "Câu ví dụ")
+      : `${now.isWord ? "Từ" : "Câu ví dụ"} · lần ${now.rep}/${REPS}`;
+    const round = LOOP.mode === "drive" && LOOP.times !== 1 ? ` · lượt ${LOOP.round}/${LOOP.times || "∞"}` : "";
     bar.innerHTML = `<div class="loop-main">
-        <div class="loop-meta">🎧 Từ ${LOOP.idx + 1}/${LOOP.items.length}${LOOP.todayIds.has(w.id) ? " · ôn hôm nay" : ""} · ${step}${LOOP.paused ? " · đã tạm dừng" : ""}</div>
+        <div class="loop-meta">${LOOP.mode === "drive" ? "🚗" : "🎧"} Từ ${LOOP.idx + 1}/${LOOP.items.length}${round}${LOOP.todayIds.has(w.id) ? " · ôn hôm nay" : ""} · ${step}${LOOP.paused ? " · đã tạm dừng" : ""}</div>
         <div class="loop-word${now && now.isWord ? " on" : ""}">${esc(w.word)} ${w.ipa ? `<small>${esc(w.ipa)}</small>` : ""}</div>
         ${w.meaningVi ? `<div class="loop-vi">${esc(w.meaningVi)}</div>` : ""}
-        ${now && !now.isWord ? `<div class="loop-ex on">${esc(now.text)}</div>` : ""}
+        ${now && !now.isWord && !now.isVi ? `<div class="loop-ex on">${esc(now.text)}</div>` : ""}
       </div>
       <div class="loop-ctl">
         <label class="loop-rate">Tốc độ <select id="loopRate">${[["0.65", "Rất chậm"], ["0.8", "Chậm"], ["1", "Bình thường"]]
@@ -1087,7 +1096,45 @@
         <button class="btn small" data-loop="stop">■ Dừng</button>
       </div>`;
   }
+  // 🚗 One word: twice, its Vietnamese meaning, then its examples (up to 3) once each.
+  async function driveWord(w, token) {
+    const live = () => token === LOOP.token && LOOP.on;
+    const exs = [...[...(w.context ? [w.context] : []), ...(w.examples || [])].slice(0, 3), ...(w.myExamples || [])].filter(Boolean);
+    const vi = (w.meaningVi || "").split(/[;,]/).map((x) => x.trim()).filter(Boolean).slice(0, 2).join(", ");
+    const steps = [{ text: w.word, isWord: true }, { text: w.word, isWord: true }, ...(vi ? [{ text: vi, isVi: true }] : []),
+      ...exs.map((t) => ({ text: t }))];
+    for (let i = 0; i < steps.length; i++) {
+      await wait(0, token);
+      if (!live()) return false;
+      const s = steps[i];
+      showLoop({ ...s, rep: 1 });
+      if (s.isWord) await speakSlow(s.text, true);
+      else if (s.isVi) await SE.sayVi(s.text, 1);
+      else await SE.say(s.text, Math.max(0.8, LOOP.rate));
+      if (!live()) return false;
+      if (LOOP.paused) { i--; continue; } // paused in the middle: say it again after resuming
+      await wait(s.isWord ? 700 : 1000, token);
+    }
+    await wait(1500, token);
+    return live();
+  }
   async function runLoop(token) {
+    if (LOOP.mode === "drive") {
+      for (;;) {
+        while (LOOP.on && token === LOOP.token && LOOP.idx < LOOP.items.length) {
+          const w = LOOP.items[LOOP.idx];
+          if (!(await driveWord(w, token))) return;
+          if (LOOP.todayIds.has(w.id)) { studied(w.id, "word"); studied(w.id, "ex"); }
+          LOOP.idx++;
+        }
+        if (token !== LOOP.token || !LOOP.on) return;
+        if (LOOP.times !== 0 && LOOP.round >= LOOP.times) break;
+        LOOP.round++; LOOP.idx = 0;                                   // the whole list again
+        await wait(2500, token);
+      }
+      if (token === LOOP.token && LOOP.on) { toast("🚗 Đã nghe xong."); stopLoop(); }
+      return;
+    }
     while (LOOP.on && token === LOOP.token && LOOP.idx < LOOP.items.length) {
       const w = LOOP.items[LOOP.idx], ex = easyExample(w);
       const parts = [[w.word, true], ...(ex ? [[ex, false]] : [])];
@@ -1113,10 +1160,16 @@
     if (LOOP.idx >= LOOP.items.length) return stopLoop();
     const token = ++LOOP.token; LOOP.now = null; showLoop(); runLoop(token);
   }
-  async function startLoop() {
+  async function startLoop(mode = "practice") {
     const { items, todayIds } = loopWords();
     if (!items.length) return toast("Chưa có từ nào để nghe trong danh sách này.");
-    Object.assign(LOOP, { on: true, paused: false, idx: 0, items, todayIds, now: null });
+    // Inside the tap: let every player start, so the phone plays the whole session without another tap.
+    LOOP.audio ||= new Audio();
+    LOOP.audio.src = SE.SILENT_WAV;
+    LOOP.audio.play().catch(() => {});
+    SE.unlockAudio?.();
+    const times = +(pref("listenRepeat", "1"));
+    Object.assign(LOOP, { on: true, paused: false, idx: 0, items, todayIds, now: null, mode, round: 1, times: Number.isFinite(times) ? times : 1 });
     try { LOOP.lock = await navigator.wakeLock?.request("screen"); } catch { LOOP.lock = null; } // keep the screen on
     renderLoopBtn(); restartLoop();
   }
@@ -1127,14 +1180,14 @@
     LOOP.lock = null; showLoop(); renderLoopBtn();
   }
   function renderLoopBtn() {
-    const b = $("loopBtn"); if (!b) return;
-    b.textContent = LOOP.on ? "■ Dừng nghe" : "🎧 Nghe & nói theo";
-    b.setAttribute("aria-pressed", LOOP.on);
+    const b = $("loopBtn"), d = $("driveBtn");
+    if (b) { b.textContent = LOOP.on && LOOP.mode === "practice" ? "■ Dừng nghe" : "🎧 Nghe & nói theo"; b.setAttribute("aria-pressed", LOOP.on && LOOP.mode === "practice"); }
+    if (d) { d.textContent = LOOP.on && LOOP.mode === "drive" ? "■ Dừng" : "🚗 Nghe khi lái xe"; d.setAttribute("aria-pressed", LOOP.on && LOOP.mode === "drive"); }
   }
 
   document.addEventListener("se:view", (e) => {
     closePop();
-    if (e.detail !== "words") { if (LOOP.on) stopLoop(); return; }
+    if (e.detail !== "words") { if (LOOP.on && LOOP.mode !== "drive") stopLoop(); return; } // 🚗 keeps going
     ui.review = null;
     SE.startSession({ id: "words", title: "Từ vựng", titleVi: "Từ vựng" }, "words");
     render();

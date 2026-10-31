@@ -223,6 +223,7 @@
     });
   }
   function stop() { C.gen++; C.audio?.pause(); C.done?.(true); C.done = null; }
+  function unlock() { const a = (C.audio ||= new Audio()); a.src = silence; a.play().catch(() => {}); }
 
   function statusText() {
     if (!token()) return "Bật đồng bộ GitHub (phần “Kết nối máy tính ↔ điện thoại” bên dưới) để có giọng AI trên điện thoại.";
@@ -243,5 +244,5 @@
 
   // How many of these sentences already have the AI voice (an article's "12/62 câu").
   const progress = (texts) => ({ ready: texts.filter((t) => has(t, "A")).length, total: texts.length });
-  window.SE_CLOUDVOICE = { has, play, stop, publish, refresh, statusText, voiceOf, wanted, progress, sentencesOf };
+  window.SE_CLOUDVOICE = { has, play, stop, publish, refresh, statusText, voiceOf, wanted, progress, sentencesOf, unlock };
 })();
