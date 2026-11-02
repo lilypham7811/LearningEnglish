@@ -618,7 +618,8 @@
         } else if (f.dataset.form === "paste") {
           const text = fd.get("text").trim();
           if (!text) return;
-          const title = fd.get("title").trim() || text.split(/[.!?\n]/)[0].slice(0, 70);
+          const first = text.split(/[.!?\n]/)[0].trim();
+          const title = fd.get("title").trim() || (first.length <= 70 ? first : first.slice(0, 70).replace(/\s+\S*$/, "") + "…");
           await addItem({ kind: "speech", title, text, source: "Dán vào" }, { open: true });
         } else if (!SE.geminiKey()) {
           // No key: have Google AI Mode write it, then paste it back here.
@@ -683,7 +684,7 @@
         <button class="card-title" data-open>${esc(x.title)}</button>
         <p class="card-ex">${esc(x.text.slice(0, 180))}…</p>
         <div class="card-meta">${n} từ · ~${Math.max(1, Math.round(n / 130))} phút · đã luyện ${practiceCount(x.id)} lần</div>
-        <div class="card-acts"><button class="btn small primary" data-open>🎤 Luyện bài này</button><button class="btn small ghost danger" data-del title="Xóa">🗑</button></div></div></article>`;
+        <div class="card-acts"><button class="btn small primary" data-open>🎤 Luyện bài này</button><button class="btn small ghost" data-editcard title="Sửa tên và nội dung bài">✏️ Sửa</button><button class="btn small ghost danger" data-del title="Xóa">🗑</button></div></div></article>`;
     }).join("");
     const sel = ui[kind].sel;
     box.classList.toggle("selecting", !!sel);
@@ -706,6 +707,7 @@
         if (it && confirm(`Xóa “${it.title}”?`)) { saveList(kind, list(kind).filter((x) => x.id !== it.id)); renderCards(kind); }
         return;
       }
+      if (e.target.closest("[data-editcard]")) { openItem(kind, card.dataset.id); $(`view-${kind}`).querySelector("[data-edit]")?.click(); return; }
       if (e.target.closest("[data-open]")) openItem(kind, card.dataset.id);
     };
   }
@@ -1121,17 +1123,23 @@
       b.textContent = "🔊 Nghe mẫu";
     };
     box.querySelector("[data-rec]").onclick = (e) => toggleSpeechRecording(item, e.currentTarget);
+    // ✏️ Sửa: the title and the text become editable; ✓ Lưu saves both, Hủy leaves them as they were.
     box.querySelector("[data-edit]").onclick = (e) => {
-      const t = box.querySelector("[data-text]");
-      if (e.currentTarget.dataset.on) {
-        const text = t.querySelector("textarea").value.trim();
-        if (text) updateItem(kind, item.id, { text });
+      const btn = e.currentTarget, t = box.querySelector("[data-text]"), h = box.querySelector(".d-title");
+      if (btn.dataset.on) {
+        const text = t.querySelector("textarea").value.trim(), title = h.querySelector("input").value.trim();
+        if (text) { updateItem(kind, item.id, { text, ...(title ? { title } : {}) }); toast("✓ Đã lưu bài."); }
         renderDetail(kind);
         return;
       }
-      e.currentTarget.dataset.on = "1";
-      e.currentTarget.textContent = "✓ Lưu";
-      t.innerHTML = `<textarea class="input" rows="16">${esc(item.text)}</textarea>`;
+      btn.dataset.on = "1";
+      btn.textContent = "✓ Lưu";
+      h.innerHTML = `<input class="input" value="${esc(item.title)}" aria-label="Tên bài" />`;
+      t.innerHTML = `<textarea class="input" rows="16" aria-label="Nội dung bài">${esc(item.text)}</textarea>
+        <div class="toolbar"><button type="button" class="btn primary" data-save-edit>✓ Lưu</button><button type="button" class="btn ghost" data-cancel-edit>Hủy</button></div>`;
+      t.querySelector("[data-save-edit]").onclick = () => btn.click();
+      t.querySelector("[data-cancel-edit]").onclick = () => renderDetail(kind);
+      h.querySelector("input").focus();
     };
   }
 
