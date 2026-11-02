@@ -1,4 +1,5 @@
-// Section 2: "Từ vựng", the learner's word list, shown as a table:
+// Section 2: "Từ vựng", the learner's word list, shown as a table (and "Từ vựng kỹ thuật", a second book that
+// works the same way, for technical terms; see BOOKS):
 // word | part of speech + IPA | listen + say it | Oxford meaning | Vietnamese meaning | 3 common examples.
 // Words come from: clicking a word in the video subtitles, the box under a video, selecting text anywhere
 // in the app, or right-click "Save word to LearningEnglish" in the browser extension.
@@ -35,11 +36,21 @@
   const setPref = (k, v) => { try { localStorage.setItem("se_" + k, v); } catch { /* private mode */ } };
   const ui = { q: "", f: "all", review: null, group: pref("wordsGroup", "1") === "1", accent: pref("accent", "gb") };
 
-  const list = () => (SE.safeGet("words") || []).map(upgrade);
-  function saveList(items) { SE.safeSet("words", items); updateNav(); }
+  // Two word books in one list ("words", synced): "Từ vựng" (book "") and "Từ vựng kỹ thuật" (book "tech"), each
+  // with its own section, review schedule and daily limit. BOOK is the one open; each word keeps its book.
+  const BOOKS = { "": { view: "view-words", nav: "navWords", name: "Từ vựng" }, tech: { view: "view-tech", nav: "navTech", name: "Từ vựng kỹ thuật" } };
+  let BOOK = "";
+  const bookOf = (w) => (w?.book === "tech" ? "tech" : "");
+  const allWords = () => (SE.safeGet("words") || []).map(upgrade);
+  const listOf = (b) => allWords().filter((w) => bookOf(w) === b);
+  const list = () => listOf(BOOK);
+  const VIEW = () => $(BOOKS[BOOK].view);
+  // Replaces book b's words (the open book by default); the other book's stay as they are.
+  function saveList(items, b = BOOK) { SE.safeSet("words", [...items, ...allWords().filter((w) => bookOf(w) !== b)]); updateNav(); }
   function update(id, patch) {
-    saveList(list().map((x) => (x.id === id ? { ...x, ...patch } : x)));
-    if (!$("view-words").hidden && !ui.review) renderList();
+    SE.safeSet("words", allWords().map((x) => (x.id === id ? { ...x, ...patch } : x)));
+    updateNav();
+    if (!VIEW().hidden && !ui.review) renderList();
   }
   const toast = (t) => window.SE_LIB?.toast(t);
   const clean = (w) => (w || "").replace(/[’‘]/g, "'").replace(/^[^A-Za-z]+|[^A-Za-z]+$/g, "").trim();
@@ -66,7 +77,7 @@
     return w;
   }
   const famKey = (w) => w.familyKey || rootOf(w.word);
-  const siblings = (w, all = list()) => all.filter((x) => x.id !== w.id && famKey(x) === famKey(w));
+  const siblings = (w, all = listOf(bookOf(w))) => all.filter((x) => x.id !== w.id && famKey(x) === famKey(w));
   // Other words of the family from Datamuse (free, with part of speech and how common the word is):
   // only real family members (same root), common enough, no plurals and no British -ise twins of -ize words.
   const famCache = new Map();
@@ -166,7 +177,7 @@
   // Pick the review day: today + 2/4/7/14/30 days for this step, moved up to FUZZ days earlier or later
   // only when that day is nearly full; if all those days are full, look a few days later.
   function pickDay(stage, id, steps = OFFSETS) {
-    const all = list();
+    const all = listOf(bookOf(allWords().find((x) => x.id === id)));
     const earliest = today() + OFFSETS[0] * DAY; // never tomorrow: a word studied today makes room for others
     const target = Math.max(today() + steps[stage - 1] * DAY, earliest);
     const loadOn = (day) => all.filter((x) => x.id !== id && x.stage >= 1 && !known(x) && x.due != null && startOfDay(x.due) === day).length;
@@ -205,9 +216,10 @@
     const word = clean(raw.word);
     if (!word || word.length > 60) return null;
     const key = word.toLowerCase();
-    const items = list();
+    const book = raw.book ?? (VIEW().hidden ? "" : BOOK);
+    const items = listOf(book);
     const have = items.find((x) => x.word.toLowerCase() === key);
-    if (have) { toast(`“${have.word}” đã có trong Từ vựng`); return have; }
+    if (have) { toast(`“${have.word}” đã có trong ${BOOKS[book].name}`); return have; }
     const now = Date.now();
     const it = {
       id: "w" + now.toString(36) + Math.random().toString(36).slice(2, 5),
@@ -215,12 +227,12 @@
       context: (raw.context || "").replace(/\s+/g, " ").trim().slice(0, 400),
       sourceKind: raw.sourceKind || "", sourceTitle: raw.sourceTitle || "", sourceUrl: raw.sourceUrl || "", time: raw.time ?? null,
       savedAt: now, learnedAt: null, stage: 0, due: null, examples: [],
-      ...(raw.familyKey ? { familyKey: raw.familyKey } : {}),
+      ...(raw.familyKey ? { familyKey: raw.familyKey } : {}), ...(book ? { book } : {}),
     };
-    saveList([it, ...items]);
+    saveList([it, ...items], book);
     SE.track("word");
-    toast(`⭐ Đã lưu “${it.word}” vào Từ vựng`);
-    if (!$("view-words").hidden) render();
+    toast(`⭐ Đã lưu “${it.word}” vào ${BOOKS[book].name}`);
+    if (!VIEW().hidden && book === BOOK) render();
     lookup(it.id);
     return it;
   }
@@ -230,7 +242,7 @@
   // and examples, plus the Vietnamese meaning. Without a key: a free dictionary, and the Oxford link.
   // keepWord: the learner edited the word by hand, so don't change it to its base form.
   async function lookup(id, { force = false, keepWord = false } = {}) {
-    const it = list().find((x) => x.id === id);
+    const it = allWords().find((x) => x.id === id);
     keepWord = keepWord || !!it?.manual;
     if (!it || (it.dictSource === "oxford" && !force && it.lemmaChecked)) return;
     let patch = null;
@@ -269,11 +281,12 @@
     patch.lemmaChecked = true;
     if (!keepWord && lemma && lemma.toLowerCase() !== it.word.toLowerCase() && /^[a-z][a-z' -]*$/i.test(lemma) &&
         (!/\s/.test(it.word) || /\s/.test(lemma))) {
-      const twin = list().find((x) => x.id !== id && x.word.toLowerCase() === lemma.toLowerCase());
+      const own = listOf(bookOf(it));
+      const twin = own.find((x) => x.id !== id && x.word.toLowerCase() === lemma.toLowerCase());
       if (twin) {
-        saveList(list().filter((x) => x.id !== id));
+        saveList(own.filter((x) => x.id !== id), bookOf(it));
         toast(`“${it.word}” là dạng của “${twin.word}”, từ này đã có trong Từ vựng.`);
-        if (!$("view-words").hidden && !ui.review) render();
+        if (!VIEW().hidden && !ui.review) render();
         return;
       }
       patch.form = it.form || it.word;
@@ -285,11 +298,11 @@
 
   // The learner fixes a word by hand ("discussions" -> "discussion"): new meanings, same sentence and schedule.
   function editWord(id, value) {
-    const it = list().find((x) => x.id === id);
+    const it = allWords().find((x) => x.id === id);
     const word = clean(value);
     if (!it || !word || word === it.word) return false;
-    const twin = list().find((x) => x.id !== id && x.word.toLowerCase() === word.toLowerCase());
-    if (twin) { toast(`“${twin.word}” đã có trong Từ vựng.`); return false; }
+    const twin = listOf(bookOf(it)).find((x) => x.id !== id && x.word.toLowerCase() === word.toLowerCase());
+    if (twin) { toast(`“${twin.word}” đã có trong ${BOOKS[bookOf(it)].name}.`); return false; }
     update(id, { word, form: it.form || it.word, pos: "", ipa: "", defEn: "", meaningVi: "", examples: [], dictSource: null, lemmaChecked: true, manual: true });
     tried.add(id);
     lookup(id, { force: true, keepWord: true });
@@ -408,6 +421,7 @@
     pop.className = "word-pop";
     pop.innerHTML = `<b>${esc(word)}</b>
       <button type="button" class="btn small primary" data-w="save">⭐ Lưu từ</button>
+      <button type="button" class="btn small" data-w="tech" title="Lưu vào Từ vựng kỹ thuật">🔧 Kỹ thuật</button>
       <button type="button" class="btn small" data-w="say" aria-label="Nghe từ">🔊</button>
       ${info.sentence ? `<button type="button" class="btn small" data-w="sent" aria-label="Nghe cả câu">▶ Câu</button>` : ""}
       <a class="btn small" target="_blank" rel="noopener" href="https://translate.google.com/?sl=en&tl=vi&op=translate&text=${encodeURIComponent(word)}">🌐 Dịch</a>`;
@@ -418,7 +432,7 @@
       if (!b) return;
       if (b.dataset.w === "say") sayWord(word);
       else if (b.dataset.w === "sent") { SE.say(info.sentence); closePop(); }
-      else { const { sentence, ...raw } = info; save({ ...raw, word }); closePop(); }
+      else { const { sentence, ...raw } = info; save({ ...raw, word, ...(b.dataset.w === "tech" ? { book: "tech" } : {}) }); closePop(); }
     };
   }
   function place(node, r) {
@@ -443,14 +457,19 @@
       const node = sel.anchorNode?.nodeType === 3 ? sel.anchorNode.parentElement : sel.anchorNode;
       if (!text || text.length > 50 || text.split(" ").length > 5 || !/[a-z]/i.test(text) || !node?.closest?.(SEL_AREAS)) return hideSel();
       hideSel();
-      selBtn = document.createElement("button");
-      selBtn.type = "button";
-      selBtn.className = "btn small primary sel-save";
-      selBtn.textContent = `⭐ Lưu “${clean(text)}”`;
+      selBtn = document.createElement("div");
+      selBtn.className = "sel-save";
+      selBtn.innerHTML = `<button type="button" class="btn small primary" data-book="">⭐ Lưu “${esc(clean(text))}”</button>
+        <button type="button" class="btn small" data-book="tech" title="Lưu vào Từ vựng kỹ thuật">🔧 Kỹ thuật</button>`;
       document.body.appendChild(selBtn);
       place(selBtn, sel.getRangeAt(0).getBoundingClientRect());
       selBtn.onpointerdown = (e) => e.preventDefault(); // keep the selection
-      selBtn.onclick = () => { save({ word: text, ...contextFor(node) }); hideSel(); getSelection().removeAllRanges(); };
+      selBtn.onclick = (e) => {
+        const b = e.target.closest("[data-book]");
+        if (!b) return;
+        save({ word: text, ...contextFor(node), ...(b.dataset.book ? { book: "tech" } : {}) });
+        hideSel(); getSelection().removeAllRanges();
+      };
     }, 300);
   });
   // ---------- Tap a word in an article or speech → "⭐ Lưu từ" ----------
@@ -497,10 +516,10 @@
   // ---------- Section ----------
   const dayLabel = (t) => new Date(t).toLocaleDateString("vi-VN", { weekday: "short", day: "2-digit", month: "2-digit" });
   function render() {
-    const root = $("view-words");
+    const root = VIEW();
     const all = list();
     const mastered = all.filter(known).length;
-    root.innerHTML = `<div class="vhead"><div><p class="eyebrow">Phần 2 · Từ vựng</p><h2>Từ vựng</h2></div>
+    root.innerHTML = `<div class="vhead"><div><p class="eyebrow">Phần 2 · ${BOOK ? "Thuật ngữ chuyên ngành" : "Sổ từ của bạn"}</p><h2>${BOOKS[BOOK].name}</h2></div>
         <dl class="stat-list" aria-label="Thống kê từ vựng">
           <div style="--pc:var(--r5)"><dt>Tổng số từ</dt><dd>${all.length}</dd></div>
           <div style="--pc:var(--r1)"><dt>Còn ôn hôm nay</dt><dd>${due().length}</dd></div>
@@ -649,7 +668,7 @@
       const b = e.target.closest("[data-a]");
       if (!b) return;
       const row = b.closest("tr");
-      const w = list().find((x) => x.id === row.dataset.id);
+      const w = allWords().find((x) => x.id === row.dataset.id);
       if (!w) return;
       const exs = [...(w.context ? [w.context] : []), ...(w.examples || [])].slice(0, 3);
       if (b.dataset.a === "say") { sayWord(w.word); studied(w.id, "word"); }
@@ -661,7 +680,7 @@
       else if (b.dataset.a === "edit") openEditor(row, w);
       else if (b.dataset.a === "fam") openFamily(row, w);
       else if (b.dataset.a === "use") setUse(w.id, isReading(w) ? "speaking" : "reading");
-      else if (b.dataset.a === "del" && confirm(`Xóa “${w.word}” khỏi Từ vựng?`)) { saveList(list().filter((x) => x.id !== w.id)); render(); }
+      else if (b.dataset.a === "del" && confirm(`Xóa “${w.word}” khỏi ${BOOKS[BOOK].name}?`)) { saveList(list().filter((x) => x.id !== w.id)); render(); }
     };
   }
   // ---------- Text from the phone (paste, Share menu) ----------
@@ -675,7 +694,7 @@
     if (words.length <= 3 && t.length <= 40 && /^[A-Za-z'’ -]+[.!?,;:]?$/.test(t)) return save({ word: t, ...src }).then((it) => { if (it) showWords(); return it; });
     openPicker(t.slice(0, 600), src);
   }
-  function showWords() { if ($("view-words").hidden) SE.showView("words"); }
+  function showWords() { if (VIEW().hidden) SE.showView(BOOK ? "tech" : "words"); }
   function openPicker(text, src) {
     const dlg = $("pickDlg"), box = $("pickWords"), btn = $("pickSave");
     const parts = text.split(WORD_RE); // odd indices are words
@@ -751,7 +770,7 @@
   // the earlier examples fill up to three. exV 3 = done (also when the dictionaries had none).
   function applyDictExamples(map) {
     let changed = false;
-    const out = list().map((w) => {
+    const out = allWords().map((w) => {
       const e = (w.exV || 0) < 3 && map[w.word.toLowerCase()];
       if (!e) return w;
       changed = true;
@@ -761,8 +780,9 @@
       return { ...w, examples: ex, examplesSrc: src, exV: 3 };
     });
     if (!changed) return;
-    saveList(out);
-    if (!$("view-words").hidden && !ui.review) renderList();
+    SE.safeSet("words", out);
+    updateNav();
+    if (!VIEW().hidden && !ui.review) renderList();
   }
 
   // 🧩: the word's family. Saved members ✓, other common members with ＋ to save them into this family,
@@ -795,7 +815,7 @@
   }
   async function famSugClick(e) {
     const tr = e.target.closest(".fam-sug");
-    const w = list().find((x) => x.id === tr.dataset.for);
+    const w = allWords().find((x) => x.id === tr.dataset.for);
     if (!w) return;
     const add = e.target.closest("[data-add]");
     if (add) {
@@ -828,13 +848,13 @@
     if (what === "speak" || (h.word && h.ex)) creditReview(id);
   }
   function creditReview(id) {
-    const w = list().find((x) => x.id === id);
+    const w = allWords().find((x) => x.id === id);
     if (!w || reviewedToday(w) || known(w) || !(isDue(w) || w.stage === 0)) return;
     const patch = advance(w, true);
     update(w.id, patch);
     const days = patch.due ? Math.round((patch.due - today()) / DAY) : 0;
     toast(`✓ Đã tính là đã ôn “${w.word}”${patch.due ? ` · ôn lại sau ${days} ngày` : " · đã thuộc"}`);
-    if (!$("view-words").hidden && !ui.review) renderReview();
+    if (!VIEW().hidden && !ui.review) renderReview();
     updateNav();
   }
   async function sayIt(w, btn, out) {
@@ -853,7 +873,7 @@
   // Speaking ↔ Reading. A word past the new list's last step is learned; one that was learned as Reading and
   // becomes Speaking goes on with its reviews (in 2 days).
   function setUse(id, use) {
-    const w = list().find((x) => x.id === id);
+    const w = allWords().find((x) => x.id === id);
     if (!w || (w.use || "speaking") === use) return;
     const next = { ...w, use };
     const patch = { use };
@@ -914,7 +934,7 @@
       return;
     }
     const R = ui.review;
-    const w = list().find((x) => x.id === R.queue[0]);
+    const w = allWords().find((x) => x.id === R.queue[0]);
     // ◀ Back undoes the last step (answer, skip or "Thuộc rồi"): the word's schedule and the round as they were.
     const back = () => {
       const h = R.history?.pop();
@@ -988,8 +1008,10 @@
   }
 
   function updateNav() {
-    const n = list().length, d = due().length;
-    $("navWords").textContent = n ? `${n} từ${d ? ` · ${d} cần ôn hôm nay` : ""}` : "Lưu từ mới để ôn";
+    for (const [b, B] of Object.entries(BOOKS)) {
+      const all = listOf(b), n = all.length, d = n ? todayQueue(all).length : 0, el = $(B.nav);
+      if (el) el.textContent = n ? `${n} từ${d ? ` · ${d} cần ôn hôm nay` : ""}` : b ? "Thuật ngữ chuyên ngành" : "Lưu từ mới để ôn";
+    }
   }
 
   // ---------- 🎧 Nghe & nói theo · 🚗 Nghe khi lái xe ----------
@@ -1181,19 +1203,25 @@
 
   document.addEventListener("se:view", (e) => {
     closePop();
-    if (e.detail !== "words") { if (LOOP.on && LOOP.mode !== "drive") stopLoop(); return; } // 🚗 keeps going
+    const b = e.detail === "words" ? "" : e.detail === "tech" ? "tech" : null;
+    if (b == null) { if (LOOP.on && LOOP.mode !== "drive") stopLoop(); return; } // 🚗 keeps going
+    if (b !== BOOK) {
+      VIEW().innerHTML = ""; // one book on the page at a time (the two share element ids)
+      if (LOOP.on && LOOP.mode !== "drive") stopLoop();
+      BOOK = b; ui.q = "";
+    }
     ui.review = null;
-    SE.startSession({ id: "words", title: "Từ vựng", titleVi: "Từ vựng" }, "words");
+    SE.startSession({ id: b || "words", title: BOOKS[b].name, titleVi: BOOKS[b].name }, "words");
     render();
   });
-  document.addEventListener("se:synced", () => { updateNav(); if (!$("view-words").hidden && !ui.review) render(); });
+  document.addEventListener("se:synced", () => { updateNav(); if (!VIEW().hidden && !ui.review) render(); });
 
   // Numbers for the progress page (Tiến độ học tập).
   function stats() {
-    const all = list();
+    const all = allWords();
     return { total: all.length, fresh: all.filter((w) => w.stage === 0).length, known: all.filter(known).length,
       learning: all.filter((w) => w.stage > 0 && !known(w)).length, speaking: all.filter((w) => !isReading(w)).length,
-      reading: all.filter(isReading).length, left: due().length, reviewedToday: all.filter(reviewedToday).length };
+      reading: all.filter(isReading).length, left: todayQueue(listOf("")).length + todayQueue(listOf("tech")).length, reviewedToday: all.filter(reviewedToday).length };
   }
   window.SE_WORDS = { save, popover, sayWord, fromText, tapWord, applyDictExamples, stats };
   updateNav();
