@@ -896,3 +896,9 @@ h2 { font-weight: 800; letter-spacing: -0.02em; }
 /* Selected text: ⭐ Lưu and ⚙️ Kỹ thuật side by side */
 div.sel-save { display: flex; gap: .3rem; box-shadow: none; }
 div.sel-save .btn { box-shadow: var(--shadow); }
+
+/* 🇻🇳 Nghĩa tiếng Việt under examples and speech paragraphs */
+.vi-line { display: none; }
+body.ex-vi .vi-line { display: block; margin-top: .15rem; color: var(--ink-3); font-size: .92em; font-style: italic; line-height: 1.45; }
+body.ex-vi p.vi-line { margin: -.4rem 0 1rem; }
+[data-exvi][aria-pressed="true"] { background: var(--leaf-tint); border-color: var(--leaf); color: var(--leaf); }

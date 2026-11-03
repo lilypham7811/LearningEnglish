@@ -455,7 +455,7 @@
       const sel = getSelection();
       const text = sel.toString().replace(/\s+/g, " ").trim();
       const node = sel.anchorNode?.nodeType === 3 ? sel.anchorNode.parentElement : sel.anchorNode;
-      if (!text || text.length > 50 || text.split(" ").length > 5 || !/[a-z]/i.test(text) || !node?.closest?.(SEL_AREAS)) return hideSel();
+      if (!text || text.length > 50 || text.split(" ").length > 5 || !/[a-z]/i.test(text) || !node?.closest?.(SEL_AREAS) || node.closest(".vi-line")) return hideSel();
       hideSel();
       selBtn = document.createElement("div");
       selBtn.className = "sel-save";
@@ -544,6 +544,7 @@
         <div class="words-opts">
           <button type="button" class="btn primary small" id="loopBtn" aria-pressed="${LOOP.on && LOOP.mode === "practice"}">${LOOP.on && LOOP.mode === "practice" ? "■ Dừng nghe" : "🎧 Nghe & nói theo"}</button>
           <button type="button" class="btn small" id="driveBtn" aria-pressed="${LOOP.on && LOOP.mode === "drive"}" title="Mỗi từ đọc 10 lần: từ, nghĩa tiếng Việt và một câu ví dụ ngắn, không cần bấm">${LOOP.on && LOOP.mode === "drive" ? "■ Dừng" : "🚗 Nghe khi lái xe"}</button>
+          ${SE.exViButton()}
           <button type="button" class="btn ghost small" id="phoneHelp">📱 Lưu từ trên điện thoại</button>
           <label class="fam-toggle"><input type="checkbox" id="famToggle" ${ui.group ? "checked" : ""} /> 🧩 Gom theo họ từ</label>
           <div class="seg seg-sm" id="accentSeg" title="Giọng đọc từ: bản ghi âm của từ điển Oxford">${[["gb", "🔊 Giọng Anh"], ["us", "Giọng Mỹ"]]
@@ -659,8 +660,8 @@
           <a class="wc-ox" href="${oxfordUrl(w.word)}" target="_blank" rel="noopener">${w.dictSource === "oxford" ? "Oxford ↗" : "Xem trên Oxford ↗"}</a></td>
         <td data-label="Nghĩa tiếng Việt">${w.meaningVi ? `<div class="wc-mean">${esc(w.meaningVi)}</div>` : `<a class="small" target="_blank" rel="noopener" href="https://translate.google.com/?sl=en&tl=vi&op=translate&text=${encodeURIComponent(w.word)}">🌐 Google Dịch</a>`}</td>
         <td data-label="Câu ví dụ"><ol class="wc-exs">${[...(w.context ? [{ t: w.context, mine: true }] : []), ...(w.examples || []).map((t, i) => ({ t, src: w.examplesSrc?.[i] || "" }))].slice(0, 3)
-          .map((x, i) => `<li${x.mine ? ' class="mine" title="Câu bạn gặp từ này"' : ""}><button type="button" class="ex-say" data-a="ex" data-i="${i}" aria-label="Nghe câu">🔊</button> ${mark(w, x.t)}${x.src ? ` <span class="ex-src">${x.src}</span>` : ""}</li>`).join("") || '<li class="muted">Đang tìm câu ví dụ…</li>'}
-          ${(w.myExamples || []).map((t, i) => `<li class="my-ex"><button type="button" class="ex-say" data-a="myex" data-i="${i}" aria-label="Nghe câu">🔊</button> ${mark(w, t)} <span class="ex-src mine-src">Của tôi</span><button type="button" class="ex-del" data-a="myexdel" data-i="${i}" title="Xóa câu này" aria-label="Xóa câu này">✕</button></li>`).join("")}</ol>
+          .map((x, i) => `<li${x.mine ? ' class="mine" title="Câu bạn gặp từ này"' : ""}><button type="button" class="ex-say" data-a="ex" data-i="${i}" aria-label="Nghe câu">🔊</button> ${mark(w, x.t)}${x.src ? ` <span class="ex-src">${x.src}</span>` : ""}<span class="vi-line" data-vi="${esc(x.t)}"></span></li>`).join("") || '<li class="muted">Đang tìm câu ví dụ…</li>'}
+          ${(w.myExamples || []).map((t, i) => `<li class="my-ex"><button type="button" class="ex-say" data-a="myex" data-i="${i}" aria-label="Nghe câu">🔊</button> ${mark(w, t)} <span class="ex-src mine-src">Của tôi</span><button type="button" class="ex-del" data-a="myexdel" data-i="${i}" title="Xóa câu này" aria-label="Xóa câu này">✕</button><span class="vi-line" data-vi="${esc(t)}"></span></li>`).join("")}</ol>
           <button type="button" class="linkish add-ex" data-a="addex">＋ Thêm ví dụ của bạn</button></td>
       </tr>`).join("") + "</tbody>";
     box.onclick = (e) => {
@@ -962,7 +963,7 @@
       <div class="flash-word">${esc(w.word)} <button type="button" class="btn small" data-say>🔊</button></div>
       <div class="muted">${esc([w.pos, w.ipa].filter(Boolean).join(" · "))}</div>
           ${w.meaningVi ? `<div class="wc-mean">${esc(w.meaningVi)}</div>` : ""}${w.defEn ? `<div class="wc-def">${esc(w.defEn)}</div>` : ""}
-          ${exs.length ? `<ol class="wc-exs">${exs.map((s, i) => `<li><button type="button" class="ex-say" data-fex="${i}" aria-label="Nghe câu">🔊</button> ${mark(w, s)}</li>`).join("")}</ol>` : ""}
+          ${exs.length ? `<ol class="wc-exs">${exs.map((s, i) => `<li><button type="button" class="ex-say" data-fex="${i}" aria-label="Nghe câu">🔊</button> ${mark(w, s)}<span class="vi-line" data-vi="${esc(s)}"></span></li>`).join("")}</ol>` : ""}
           ${siblings(w).length ? `<div class="flash-fam">🧩 Cùng họ: ${siblings(w).map((x) => `<b>${esc(x.word)}</b>${x.pos ? ` <i>${esc(x.pos)}</i>` : ""}${x.meaningVi ? ` – ${esc(x.meaningVi.split(/[;,]/)[0])}` : ""}`).join(" · ")}</div>` : ""}
           <div class="flash-bottom">
             <button type="button" class="btn nav-btn" data-back ${R.history?.length ? "" : "disabled"} title="Quay lại từ trước (huỷ câu trả lời của từ đó)">◀ Back</button>

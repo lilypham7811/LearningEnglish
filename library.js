@@ -769,12 +769,13 @@
           <button class="btn primary" data-prompter>📜 Đọc chạy chữ</button>
           <button class="btn" data-model>🔊 Nghe mẫu</button>
           <button class="btn record" data-rec>🎙️ Ghi âm &amp; AI nhận xét</button>
+          ${SE.exViButton("btn ghost")}
           <button class="btn ghost" data-edit>✏️ Sửa</button>
           <button class="btn ghost danger" data-del>🗑</button>
         </div>
         <div class="rec-box" data-recbox hidden></div>
         ${item.tips ? `<div class="status"><b>💡 Mẹo trình bày:</b> ${esc(item.tips)}</div>` : ""}
-        <div class="speech-text" data-text>${paragraphs(item.text)}</div>
+        <div class="speech-text" data-text>${paragraphs(item.text, true)}</div>
       </div></div>`;
     }
     box.innerHTML = `<div class="detail-grid"><div class="detail-main">${left}</div><aside class="detail-ai">${chatHtml(kind)}</aside></div>`;
@@ -784,9 +785,11 @@
     wireDetail(kind, item);
   }
 
-  function paragraphs(text) {
+  // vi: a Vietnamese line under each paragraph (shown with 🇻🇳 Nghĩa tiếng Việt, see SE.exViButton).
+  function paragraphs(text, vi = false) {
     return text.split(/\n\s*\n|\n/).map((p) => p.trim()).filter(Boolean)
-      .map((p) => `<p>${(p.match(/[^.!?]+[.!?]+["”’)]*|[^.!?]+$/g) || [p]).map((s) => `<span class="sent">${esc(s.trim())}</span>`).join(" ")}</p>`).join("");
+      .map((p) => `<p>${(p.match(/[^.!?]+[.!?]+["”’)]*|[^.!?]+$/g) || [p]).map((s) => `<span class="sent">${esc(s.trim())}</span>`).join(" ")}</p>` +
+        (vi ? `<p class="vi-line" data-vi="${esc(p)}"></p>` : "")).join("");
   }
   // ---------- Video: clickable subtitles that follow the video ----------
   // Cues = [{ t: seconds, text }]. They come from Google AI (timestamped transcript) or from the

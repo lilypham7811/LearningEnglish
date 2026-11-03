@@ -132,6 +132,63 @@
   }
   makeQuietFrame(); // also used everywhere for Vietnamese (sayVi)
 
+  // 🇻🇳 Nghĩa tiếng Việt under example sentences (Từ vựng, Từ vựng kỹ thuật) and speech paragraphs (Phát biểu).
+  // Pages mark a place with <span class="vi-line" data-vi="English text">; while it is on (body.ex-vi, pref
+  // "exVi"), each one is filled by Google Translate (the free service the word meanings use too). Translations
+  // stay in this browser (se_viCache), so each sentence is translated once.
+  const VI_MAX = 3000;
+  let viCache = null;
+  const viStore = () => (viCache ||= (() => { try { return JSON.parse(localStorage.getItem("se_viCache")) || {}; } catch { return {}; } })());
+  let viSaveTimer = 0;
+  function viRemember(en, vi) {
+    const c = viStore();
+    c[en] = vi;
+    clearTimeout(viSaveTimer);
+    viSaveTimer = setTimeout(() => {
+      const keys = Object.keys(c);
+      keys.slice(0, Math.max(0, keys.length - VI_MAX)).forEach((k) => delete c[k]); // oldest first
+      try { localStorage.setItem("se_viCache", JSON.stringify(c)); } catch { /* full: kept for this visit */ }
+    }, 500);
+  }
+  const viPending = new Map();
+  function toVi(en) {
+    const hit = viStore()[en];
+    if (hit) return Promise.resolve(hit);
+    if (!viPending.has(en)) {
+      viPending.set(en, fetch("https://translate.googleapis.com/translate_a/single?client=gtx&sl=en&tl=vi&dt=t&dj=1&q=" + encodeURIComponent(en))
+        .then((r) => (r.ok ? r.json() : null))
+        .then((d) => { const vi = (d?.sentences || []).map((s) => s.trans || "").join("").trim(); if (vi) viRemember(en, vi); return vi; })
+        .catch(() => "")
+        .finally(() => viPending.delete(en)));
+    }
+    return viPending.get(en);
+  }
+  const exViOn = () => document.body.classList.contains("ex-vi");
+  function fillVi(root = document) {
+    if (!exViOn()) return;
+    root.querySelectorAll(".vi-line[data-vi]:not([data-vi-done])").forEach((el) => {
+      el.dataset.viDone = "1";
+      const en = el.dataset.vi;
+      const hit = viStore()[en];
+      if (hit) { el.textContent = hit; return; }
+      el.textContent = "…";
+      toVi(en).then((vi) => { el.textContent = vi || "(chưa dịch được, thử lại sau)"; if (!vi) delete el.dataset.viDone; });
+    });
+  }
+  function setExVi(on) {
+    document.body.classList.toggle("ex-vi", on);
+    safeSet("exVi", on);
+    document.querySelectorAll("[data-exvi]").forEach((b) => b.setAttribute("aria-pressed", on));
+    fillVi();
+  }
+  const exViButton = (cls = "btn small") =>
+    `<button type="button" class="${cls}" data-exvi aria-pressed="${exViOn()}" title="Hiện nghĩa tiếng Việt dưới mỗi câu">🇻🇳 Nghĩa tiếng Việt</button>`;
+  document.addEventListener("click", (e) => { if (e.target.closest("[data-exvi]")) setExVi(!exViOn()); });
+  // New sentences on the page (a section opened, a card turned) get their Vietnamese too.
+  let viObsTimer = 0;
+  new MutationObserver(() => { if (!exViOn()) return; clearTimeout(viObsTimer); viObsTimer = setTimeout(fillVi, 80); })
+    .observe(document.body, { childList: true, subtree: true });
+
   // Vietnamese (a word's meaning, read aloud in the driving mode): Google's Vietnamese voice, else the device's.
   function sayVi(text, rate = 1) {
     cloudGen++;
@@ -1400,7 +1457,7 @@ Name2: English sentence | Vietnamese translation`;
   // Synced lists: every changed item gets updatedAt, every removed item a tombstone, so computer and phone
   // can merge their copies (newest version of each item wins, deletions spread). sync.js does the merging.
   const SYNC_LISTS = ["saved", "videos", "articles", "speeches", "words", "log", "done", "hidden"];
-  const SYNC_PREFS = ["level", "aiModel", "alwaysAi", "showVi", "voices", "geminiVoice", "geminiKey", "learnerName", "dailyGoal"];
+  const SYNC_PREFS = ["level", "aiModel", "alwaysAi", "showVi", "voices", "geminiVoice", "geminiKey", "learnerName", "dailyGoal", "exVi"];
   function safeSet(k, v) {
     try {
       if (SYNC_LISTS.includes(k) && Array.isArray(v)) v = stampList(k, v);
@@ -1843,7 +1900,7 @@ Name2: English sentence | Vietnamese translation`;
     levelName: (lv) => LEVEL_VI[lv] || lv,
     // Speech helpers for sections 3-5.
     say: (text, rate = state.rate) => { stopAll(); state.playToken++; return speak(text, state.voiceA, rate); },
-    sayVi, unlockAudio, SILENT_WAV,
+    sayVi, unlockAudio, SILENT_WAV, exViButton,
     listenOnce: (maxMs, target, onInterim) => listenOnce(maxMs, target, onInterim),
     stopListening: () => state.listening?.end(),
     compareWords, pronunciationTips, hasRecognition: !!Recognition,
@@ -1944,6 +2001,7 @@ Name2: English sentence | Vietnamese translation`;
     }
     $("aiMode").checked = !!safeGet("alwaysAi");
     $("aiMode").onchange = () => safeSet("alwaysAi", $("aiMode").checked);
+    document.body.classList.toggle("ex-vi", !!safeGet("exVi"));
     $("showVi").checked = !!safeGet("showVi");
     document.body.classList.toggle("show-vi", $("showVi").checked);
     $("showVi").onchange = (e) => { document.body.classList.toggle("show-vi", e.target.checked); safeSet("showVi", e.target.checked); };
